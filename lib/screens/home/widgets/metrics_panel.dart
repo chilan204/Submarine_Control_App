@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../l10n/translations.dart';
+import '../../../translations/translations.dart';
 import '../../../theme.dart';
 import '../../../widgets/stat_tile.dart';
 

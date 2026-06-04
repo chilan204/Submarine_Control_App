@@ -5,7 +5,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import '../../../../l10n/translations.dart';
+import '../../../../translations/translations.dart';
 import '../../../../models/command.dart';
 import '../../../../models/voice_command_response.dart';
 import '../../../../providers/app_provider.dart';

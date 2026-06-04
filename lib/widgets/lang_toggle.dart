@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../l10n/translations.dart';
+import '../translations/translations.dart';
 import '../theme.dart';
 
 // VI / EN language toggle — mirrors LangToggle in App.tsx

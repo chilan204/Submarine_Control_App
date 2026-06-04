@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../../../../l10n/translations.dart';
+import '../../../../../translations/translations.dart';
 import '../../../../../theme.dart';
 import '../../../../../widgets/sound_bars.dart';
 import 'mic_button.dart';

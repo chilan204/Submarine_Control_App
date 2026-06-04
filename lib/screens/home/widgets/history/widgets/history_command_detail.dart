@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../models/user_session_record.dart';
-import '../../../../../l10n/translations.dart';
+import '../../../../../translations/translations.dart';
 import '../../../../../theme.dart';
 
 class HistoryCommandDetail extends StatelessWidget {

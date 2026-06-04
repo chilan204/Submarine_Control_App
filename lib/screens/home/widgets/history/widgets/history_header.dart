@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../history_filter_type.dart';
 import 'history_filter_tab.dart';
-import '../../../../../l10n/translations.dart';
+import '../../../../../translations/translations.dart';
 import '../../../../../theme.dart';
 
 class HistoryHeader extends StatelessWidget {

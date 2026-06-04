@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/command.dart';
 import '../models/user_session_record.dart';
 import '../services/user_session_service.dart';
-import '../l10n/translations.dart';
+import '../translations/translations.dart';
 
 // Submarine position state for the GPS map
 class SubPosition {

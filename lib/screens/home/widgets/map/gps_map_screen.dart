@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import '../../../../l10n/translations.dart';
+import '../../../../translations/translations.dart';
 import '../../../../providers/app_provider.dart';
 import '../../../../services/telemetry_service.dart';
 import '../../../../theme.dart';

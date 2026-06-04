@@ -82,7 +82,7 @@ class _PasswordState extends State<Password> {
                 color: AppColors.blue, fontSize: 14, letterSpacing: 1)),
         const SizedBox(height: 6),
         LoginTextField(
-          hintText: 'admin',
+          hintText: 'Enter username',
           icon: Icons.person_outline,
           onChanged: (v) => setState(() => _username = v),
           onSubmit: _handleLogin,

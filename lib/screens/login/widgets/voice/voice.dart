@@ -8,7 +8,7 @@ import 'package:submarine_flutter/screens/login/widgets/voice/mic_button.dart';
 import 'package:submarine_flutter/services/auth_api_service.dart';
 import 'package:submarine_flutter/theme.dart';
 import 'package:submarine_flutter/utils/audio_file.dart';
-import '../../../../l10n/translations.dart';
+import '../../../../translations/translations.dart';
 import '../../../../providers/app_provider.dart';
 
 class Voice extends StatefulWidget {
@@ -207,7 +207,7 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
     final busy = _isListening || _isVerifying;
 
     return Column(
-      key: const ValueKey('voice'),
+      mainAxisSize: MainAxisSize.min,
       children: [
         Align(
           alignment: Alignment.centerLeft,
