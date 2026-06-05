@@ -67,7 +67,7 @@ class _PasswordState extends State<Password> {
     final t = context.watch<AppProvider>().t;
 
     return Column(
-      key: const ValueKey('password'),
+      mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
@@ -82,7 +82,7 @@ class _PasswordState extends State<Password> {
                 color: AppColors.blue, fontSize: 14, letterSpacing: 1)),
         const SizedBox(height: 6),
         LoginTextField(
-          hintText: 'admin',
+          hintText: 'Enter username',
           icon: Icons.person_outline,
           onChanged: (v) => setState(() => _username = v),
           onSubmit: _handleLogin,
@@ -94,7 +94,7 @@ class _PasswordState extends State<Password> {
                 color: AppColors.blue, fontSize: 14, letterSpacing: 1)),
         const SizedBox(height: 6),
         LoginTextField(
-          hintText: '••••••••••••',
+          hintText: '••••••••••',
           icon: Icons.lock_outline,
           obscureText: !_showPassword,
           suffixIcon: IconButton(

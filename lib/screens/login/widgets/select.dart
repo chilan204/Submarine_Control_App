@@ -19,13 +19,13 @@ class Select extends StatelessWidget {
     final t = context.watch<AppProvider>().t;
 
     return Column(
-      key: const ValueKey('select'),
+      spacing: 20,
+      mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           t.selectAuth,
           style: const TextStyle(color: AppColors.muted, fontSize: 14),
         ),
-        const SizedBox(height: 25),
         AuthCart(
           icon: Icons.mic,
           title: t.voiceAuth,
@@ -33,7 +33,6 @@ class Select extends StatelessWidget {
           color: AppColors.accent,
           onTap: onVoiceTap,
         ),
-        const SizedBox(height: 15),
         AuthCart(
           icon: Icons.lock_outline,
           title: t.passwordAuth,

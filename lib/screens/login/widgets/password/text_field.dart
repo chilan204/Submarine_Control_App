@@ -4,15 +4,15 @@ import 'package:submarine_flutter/theme.dart';
 class LoginTextField extends StatelessWidget {
   const LoginTextField({
     super.key,
-    required this.hintText,
     required this.icon,
     this.obscureText = false,
     this.suffixIcon,
+    this.hintText,
     required this.onChanged,
     required this.onSubmit,
   });
 
-  final String hintText;
+  final String? hintText;
   final IconData icon;
   final bool obscureText;
   final Widget? suffixIcon;

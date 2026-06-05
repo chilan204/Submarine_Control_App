@@ -207,7 +207,7 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
     final busy = _isListening || _isVerifying;
 
     return Column(
-      key: const ValueKey('voice'),
+      mainAxisSize: MainAxisSize.min,
       children: [
         Align(
           alignment: Alignment.centerLeft,
