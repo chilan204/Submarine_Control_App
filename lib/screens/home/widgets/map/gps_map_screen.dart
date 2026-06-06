@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
 import '../../../../l10n/translations.dart';
 import '../../../../providers/app_provider.dart';
@@ -12,7 +13,6 @@ import 'widgets/submarine_popup.dart';
 import 'widgets/coordinate_bar.dart';
 import '../metrics_panel.dart';
 import 'widgets/tracking_pill.dart';
-import 'widgets/submarine_icon.dart';
 
 class GpsMapScreen extends StatefulWidget {
   const GpsMapScreen({super.key});
@@ -32,21 +32,32 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
 
   // Trail — last 40 positions
   final List<LatLng> _trail = [
-    LatLng(10.70, 107.9),
-    LatLng(10.74, 108.0),
-    LatLng(10.78, 108.1),
-    LatLng(10.82, 108.2),
+    const LatLng(10.70, 107.9),
+    const LatLng(10.74, 108.0),
+    const LatLng(10.78, 108.1),
+    const LatLng(10.82, 108.2),
   ];
 
   bool _showPopup = false;
   Timer? _fallbackTimer;
-  final MapController _mapCtrl = MapController();
+
+  // MapLibre GL
+  MapLibreMapController? _mapCtrl;
+  bool _mapReady = false;
+  Symbol? _submarineSymbol;
+  Line? _trailLine;
 
   // WebSocket telemetry
   late final TelemetryService _telemetry;
   StreamSubscription<TelemetryData>? _dataSub;
   StreamSubscription<bool>? _statusSub;
   bool _wsConnected = false;
+
+  // Goong style URL
+  String get _goongStyleUrl {
+    final apiKey = dotenv.env['GOONG_MAP_TILES_KEY'] ?? '';
+    return 'https://tiles.goong.io/assets/goong_light_v2.json?api_key=$apiKey';
+  }
 
   @override
   void initState() {
@@ -86,6 +97,68 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     super.dispose();
   }
 
+  /// Called when the MapLibre map is fully initialized.
+  void _onMapCreated(MapLibreMapController controller) {
+    _mapCtrl = controller;
+  }
+
+  /// Called when the map style is loaded and ready for layers/symbols.
+  Future<void> _onStyleLoaded() async {
+    _mapReady = true;
+    await _addSubmarineImage();
+    await _updateMapElements();
+  }
+
+  /// Renders the submarine icon widget to a PNG and registers it with the map.
+  Future<void> _addSubmarineImage() async {
+    // Create a submarine icon as a simple painted image
+    const size = 48.0;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+
+    final cx = size / 2;
+    final cy = size / 2;
+
+    // Sonar ring
+    canvas.drawCircle(
+      Offset(cx, cy),
+      16,
+      Paint()
+        ..color = AppColors.accent.withValues(alpha: 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+
+    // Hull
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(cx, cy + 2), width: 28, height: 12),
+      Paint()..color = AppColors.accent.withValues(alpha: 0.9),
+    );
+
+    // Conning tower
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromCenter(center: Offset(cx, cy - 4), width: 8, height: 10),
+        const Radius.circular(2),
+      ),
+      Paint()..color = const Color(0xFF00cc88),
+    );
+
+    // Center dot
+    canvas.drawCircle(
+      Offset(cx, cy + 2),
+      3,
+      Paint()..color = AppColors.background,
+    );
+
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(size.toInt(), size.toInt());
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    final bytes = byteData!.buffer.asUint8List();
+
+    await _mapCtrl?.addImage('submarine-icon', bytes);
+  }
+
   /// Called when a telemetry message arrives from the WebSocket.
   void _onTelemetryData(TelemetryData data) {
     if (!mounted) return;
@@ -99,12 +172,14 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
       _trail.add(LatLng(data.latitude, data.longitude));
       if (_trail.length > 40) _trail.removeAt(0);
     });
+    _updateMapElements();
   }
 
   /// Fallback simulation when WebSocket is not available.
   void _startFallbackSimulation() {
     if (_fallbackTimer != null) return;
-    _fallbackTimer = Timer.periodic(const Duration(seconds: 2), (_) => _moveSub());
+    _fallbackTimer =
+        Timer.periodic(const Duration(seconds: 2), (_) => _moveSub());
   }
 
   void _moveSub() {
@@ -112,26 +187,64 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     final rad = (_heading * math.pi) / 180;
     var newLat = _lat + math.cos(rad) * 0.003;
     var newLng = _lng + math.sin(rad) * 0.003;
-    // var newHeading = _heading;
-
-    // // Bounce at boundary — mirrors the React heading flip logic
-    // if (newLat > 12 || newLat < 9) newHeading = (newHeading + 180) % 360;
-    // if (newLng > 110 || newLng < 106) newHeading = (360 - newHeading + 180) % 360;
 
     setState(() {
       _lat = newLat;
       _lng = newLng;
-      // _heading = newHeading;
       _trail.add(LatLng(newLat, newLng));
       if (_trail.length > 40) _trail.removeAt(0);
     });
+    _updateMapElements();
+  }
+
+  /// Syncs the submarine marker and trail line on the MapLibre map.
+  Future<void> _updateMapElements() async {
+    if (!_mapReady || _mapCtrl == null) return;
+
+    // Update or create submarine marker
+    final subPos = LatLng(_lat, _lng);
+    if (_submarineSymbol != null) {
+      await _mapCtrl!.updateSymbol(
+        _submarineSymbol!,
+        SymbolOptions(
+          geometry: subPos,
+          iconRotate: _heading - 90,
+        ),
+      );
+    } else {
+      _submarineSymbol = await _mapCtrl!.addSymbol(
+        SymbolOptions(
+          geometry: subPos,
+          iconImage: 'submarine-icon',
+          iconSize: 1.0,
+          iconRotate: _heading - 90,
+        ),
+      );
+    }
+
+    // Update or create trail polyline
+    if (_trailLine != null) {
+      await _mapCtrl!.updateLine(
+        _trailLine!,
+        LineOptions(lineColor: '#00d4aa', geometry: _trail),
+      );
+    } else {
+      _trailLine = await _mapCtrl!.addLine(
+        LineOptions(
+          geometry: _trail,
+          lineColor: '#00d4aa',
+          lineWidth: 2.0,
+          lineOpacity: 0.7,
+          linePattern: 'dash',
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final t = context.watch<AppProvider>().t;
     final lang = context.watch<AppProvider>().lang;
-    final subPos = LatLng(_lat, _lng);
 
     return Column(
       children: [
@@ -152,71 +265,45 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
         Expanded(
           child: Stack(
             children: [
-              FlutterMap(
-                mapController: _mapCtrl,
-                options: MapOptions(
-                  initialCenter: const LatLng(10.8, 108.5),
-                  initialZoom: 7,
-                  onTap: (_, __) => setState(() => _showPopup = false),
+              MapLibreMap(
+                styleString: _goongStyleUrl,
+                initialCameraPosition: const CameraPosition(
+                  target: LatLng(10.8, 108.5),
+                  zoom: 7,
                 ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.nauticom.submarine',
-                  ),
-                  PolylineLayer(
-                    polylines: [
-                      Polyline(
-                        points: _trail,
-                        strokeWidth: 2,
-                        color: AppColors.blue.withValues(alpha: 0.7),
-                        pattern: StrokePattern.dashed(
-                          segments: [12, 8],
-                        ),
-                      ),
-                    ],
-                  ),
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: subPos,
-                        width: 48,
-                        height: 48,
-                        child: GestureDetector(
-                          onTap: () =>
-                              setState(() => _showPopup = !_showPopup),
-                          child: SubmarineIcon(heading: _heading),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_showPopup)
-                    MarkerLayer(
-                      markers: [
-                        Marker(
-                          point: LatLng(_lat + 0.08, _lng),
-                          width: 200,
-                          height: 140,
-                          child: SubmarinePopup(
-                            lat: _lat,
-                            lng: _lng,
-                            depth: _depth,
-                            speed: _speed,
-                            heading: _heading,
-                            pressure: _pressure,
-                            t: t,
-                          ),
-                        ),
-                      ],
-                    ),
-                ],
+                onMapCreated: _onMapCreated,
+                onStyleLoadedCallback: _onStyleLoaded,
+                onMapClick: (_, __) => setState(() => _showPopup = false),
+                compassEnabled: false,
+                myLocationEnabled: false,
+                trackCameraPosition: true,
               ),
 
-              // Dark tint — military map aesthetic (replaces Google Maps dark styles)
-              IgnorePointer(
-                child: Container(
-                  color: AppColors.background.withValues(alpha: 0.45),
+              // Submarine popup overlay
+              if (_showPopup)
+                Positioned(
+                  top: 20,
+                  left: 0,
+                  right: 0,
+                  child: Center(
+                    child: SubmarinePopup(
+                      lat: _lat,
+                      lng: _lng,
+                      depth: _depth,
+                      speed: _speed,
+                      heading: _heading,
+                      pressure: _pressure,
+                      t: t,
+                    ),
+                  ),
+                ),
+
+              // Tap target for popup toggle on map area
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onDoubleTap: () => setState(() => _showPopup = !_showPopup),
+                  child: const SizedBox.shrink(),
                 ),
               ),
 
@@ -231,12 +318,12 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
                 ),
               ),
 
-              // OSM attribution (bottom-right, required by OSM terms)
+              // Goong attribution (bottom-right)
               Positioned(
                 bottom: 4,
                 right: 8,
                 child: Text(
-                  '© OpenStreetMap contributors',
+                  '© Goong',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.4),
                     fontSize: 8,

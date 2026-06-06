@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'providers/app_provider.dart';
 import 'screens/login/login_screen.dart';
@@ -7,8 +8,9 @@ import 'screens/home/home.dart';
 import 'theme.dart';
 import 'widgets/background_wrapper.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: '.env');
   // Prefer dark status bar icons on the dark background
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,

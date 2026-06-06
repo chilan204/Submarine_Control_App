@@ -12,9 +12,11 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # Map (OSM, free - no API key required)
-  flutter_map: ^7.0.2
-  latlong2: ^0.9.1
+  # Map (Goong.io vector tiles via MapLibre GL)
+  maplibre_gl: ^0.22.0
+
+  # Environment variables (.env)
+  flutter_dotenv: ^5.2.1
 
   # Voice recognition
   speech_to_text: ^7.0.0
@@ -50,4 +52,5 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
+    - .env
     - assets/images/login_bg.jpg
