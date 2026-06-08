@@ -1,12 +1,10 @@
-# Submarine Control (Flutter)
-
-Phiên bản Flutter/Dart của ứng dụng **Submarine Control App** (React + Vite), giữ nguyên giao diện và luồng chức năng.
+# Submarine Control App (Flutter)
 
 ## Tính năng
 
-- Đăng nhập bằng mật khẩu (`admin` / `SUBMARINE2024`) hoặc xác thực giọng nói
+- Đăng nhập bằng mật khẩu hoặc xác thực giọng nói
 - Điều khiển bằng giọng nói / nhập lệnh (tiếng Việt & English)
-- Bản đồ GPS với vị trí tàu ngầm mô phỏng (OpenStreetMap — không cần API key)
+- Bản đồ GPS với vị trí tàu ngầm mô phỏng
 - Lịch sử lệnh, lọc, tìm kiếm
 - Chuyển ngôn ngữ VI / EN
 
@@ -32,13 +30,3 @@ lib/
   screens/               # login, voice, map, history, main_shell
   widgets/               # background, lang toggle, sound bars, stat tile
 ```
-
-## Khác biệt so với bản web
-
-| Web (React) | Flutter |
-|-------------|---------|
-| Google Maps + API key | OpenStreetMap (`flutter_map`) |
-| Web Speech API | `speech_to_text` |
-| Tailwind CSS | Material + custom widgets |
-
-Giao diện (màu `#00ffaa`, layout, màn hình) được port trực tiếp từ `src/app/`.
