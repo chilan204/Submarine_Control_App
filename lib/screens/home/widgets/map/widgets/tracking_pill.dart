@@ -5,18 +5,16 @@ import '../../../../../theme.dart';
 class TrackingPill extends StatelessWidget {
   final bool isConnected;
   final String liveText;
-  final String simulatedText;
 
   const TrackingPill({
     super.key,
     required this.isConnected,
     required this.liveText,
-    required this.simulatedText,
   });
 
   @override
   Widget build(BuildContext context) {
-    final statusText = isConnected ? liveText : simulatedText;
+    final statusText = liveText;
     final statusColor = isConnected ? AppColors.accent : AppColors.amber;
 
     return Container(

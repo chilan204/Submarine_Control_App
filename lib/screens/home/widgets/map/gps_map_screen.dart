@@ -89,17 +89,15 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
 
   /// Renders the submarine icon widget to a PNG and registers it with the map.
   Future<void> _addSubmarineImage() async {
-    // Create a submarine icon as a simple painted image
     const size = 48.0;
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    final cx = size / 2;
-    final cy = size / 2;
+    const cx = size / 2;
+    const cy = size / 2;
 
-    // Sonar ring
     canvas.drawCircle(
-      Offset(cx, cy),
+      const Offset(cx, cy),
       16,
       Paint()
         ..color = AppColors.accent.withValues(alpha: 0.3)
@@ -107,24 +105,21 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
         ..strokeWidth = 1,
     );
 
-    // Hull
     canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx, cy + 2), width: 28, height: 12),
+      Rect.fromCenter(center: const Offset(cx, cy + 2), width: 28, height: 12),
       Paint()..color = AppColors.accent.withValues(alpha: 0.9),
     );
 
-    // Conning tower
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(cx, cy - 4), width: 8, height: 10),
+        Rect.fromCenter(center: const Offset(cx, cy - 4), width: 8, height: 10),
         const Radius.circular(2),
       ),
       Paint()..color = const Color(0xFF00cc88),
     );
 
-    // Center dot
     canvas.drawCircle(
-      Offset(cx, cy + 2),
+      const Offset(cx, cy + 2),
       3,
       Paint()..color = AppColors.background,
     );
@@ -241,7 +236,6 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
                 child: TrackingPill(
                   isConnected: _wsConnected,
                   liveText: lang == Lang.vi ? 'TRỰC TIẾP' : 'LIVE',
-                  simulatedText: lang == Lang.vi ? 'MÔ PHỎNG' : 'SIMULATED',
                 ),
               ),
 
