@@ -17,43 +17,6 @@ import '../metrics_panel.dart';
 import 'widgets/command_log.dart';
 import 'widgets/input_area.dart';
 
-// Command parsing — mirrors parseCommand() in VoiceControlScreen.tsx
-Map<String, dynamic> _parseCommand(String text, Lang lang) {
-  final lower = text.toLowerCase();
-  final cmdsVi = <String, Map<String, dynamic>>{
-    'lặn xuống': {'response': 'Đang thực hiện lặn xuống. Độ sâu mục tiêu: -50m', 'status': CommandStatus.success},
-    'nổi lên': {'response': 'Đang nổi lên. Độ sâu mục tiêu: 0m', 'status': CommandStatus.success},
-    'tiến': {'response': 'Động cơ đẩy kích hoạt. Tốc độ 5 hải lý/h', 'status': CommandStatus.success},
-    'dừng': {'response': 'Hệ thống đẩy dừng. Giữ vị trí hiện tại', 'status': CommandStatus.success},
-    'quay trái': {'response': 'Bánh lái trái 15°. Đang điều hướng', 'status': CommandStatus.success},
-    'quay phải': {'response': 'Bánh lái phải 15°. Đang điều hướng', 'status': CommandStatus.success},
-    'phóng ngư lôi': {'response': 'CẢNH BÁO: Cần xác nhận từ chỉ huy cấp cao', 'status': CommandStatus.warning},
-    'tàng hình': {'response': 'Hệ thống âm học tắt. Chế độ im lặng kích hoạt', 'status': CommandStatus.success},
-    'kiểm tra': {'response': 'Tất cả hệ thống bình thường. Pin: 87%. Oxy: 94%', 'status': CommandStatus.success},
-    'khẩn cấp': {'response': 'KHẨN CẤP: Thổi két nước dằn. Nổi lên khẩn cấp!', 'status': CommandStatus.error},
-  };
-  final cmdsEn = <String, Map<String, dynamic>>{
-    'dive': {'response': 'Executing dive. Target depth: -50m', 'status': CommandStatus.success},
-    'surface': {'response': 'Surfacing. Target depth: 0m', 'status': CommandStatus.success},
-    'forward': {'response': 'Propulsion engaged. Speed: 5 knots', 'status': CommandStatus.success},
-    'stop': {'response': 'Propulsion stopped. Holding current position', 'status': CommandStatus.success},
-    'turn left': {'response': 'Rudder left 15°. Navigating', 'status': CommandStatus.success},
-    'turn right': {'response': 'Rudder right 15°. Navigating', 'status': CommandStatus.success},
-    'torpedo': {'response': 'WARNING: Requires senior command confirmation', 'status': CommandStatus.warning},
-    'stealth': {'response': 'Acoustic systems off. Silent mode activated', 'status': CommandStatus.success},
-    'check': {'response': 'All systems normal. Battery: 87%. Oxygen: 94%', 'status': CommandStatus.success},
-    'emergency': {'response': 'EMERGENCY: Blowing ballast tanks. Emergency ascent!', 'status': CommandStatus.error},
-  };
-
-  final cmds = lang == Lang.vi ? cmdsVi : cmdsEn;
-  for (final entry in cmds.entries) {
-    if (lower.contains(entry.key)) return entry.value;
-  }
-  return lang == Lang.vi
-      ? {'response': 'Lệnh nhận được: "$text". Đang xử lý...', 'status': CommandStatus.success}
-      : {'response': 'Command received: "$text". Processing...', 'status': CommandStatus.success};
-}
-
 class VoiceControlScreen extends StatefulWidget {
   const VoiceControlScreen({super.key});
 
@@ -138,18 +101,15 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   }
 
   void _addCommand(String text, AppProvider provider) {
-    final lang = provider.lang;
-    final result = _parseCommand(text, lang);
     final cmd = Command(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: text,
       timestamp: DateTime.now(),
-      status: result['status'] as CommandStatus,
-      response: result['response'] as String,
+      status: CommandStatus.success,
+      response: '',
     );
     provider.addCommand(cmd);
 
-    // Metrics are now driven by WebSocket telemetry — no local mutation
     setState(() {
       _commands.add(cmd);
     });
@@ -189,7 +149,9 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
 
     if (_speechReady) {
       await _speech.listen(
-        localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
+        listenOptions: stt.SpeechListenOptions(
+          localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
+        ),
         onResult: (result) {
           setState(() => _transcript = result.recognizedWords);
         },
