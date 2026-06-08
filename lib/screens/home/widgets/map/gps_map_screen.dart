@@ -32,8 +32,6 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
   // Trail — last 40 positions
   final List<LatLng> _trail = [];
 
-  Timer? _fallbackTimer;
-
   // MapLibre GL
   MapLibreMapController? _mapCtrl;
   bool _mapReady = false;
@@ -66,24 +64,12 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     _statusSub = _telemetry.statusStream.listen((connected) {
       if (!mounted) return;
       setState(() => _wsConnected = connected);
-
-      if (connected) {
-        // WebSocket connected — stop fallback simulation
-        _fallbackTimer?.cancel();
-        _fallbackTimer = null;
-      } else {
-        // WebSocket disconnected — start fallback simulation
-        _startFallbackSimulation();
-      }
     });
 
-    // Start fallback simulation until WebSocket connects
-    _startFallbackSimulation();
   }
 
   @override
   void dispose() {
-    _fallbackTimer?.cancel();
     _dataSub?.cancel();
     _statusSub?.cancel();
     _telemetry.dispose();
@@ -163,28 +149,6 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
       _speed = data.speed;
       _pressure = data.pressure;
       _trail.add(LatLng(data.latitude, data.longitude));
-      if (_trail.length > 40) _trail.removeAt(0);
-    });
-    _updateMapElements();
-  }
-
-  /// Fallback simulation when WebSocket is not available.
-  void _startFallbackSimulation() {
-    if (_fallbackTimer != null) return;
-    _fallbackTimer =
-        Timer.periodic(const Duration(seconds: 2), (_) => _moveSub());
-  }
-
-  void _moveSub() {
-    if (!mounted) return;
-    final rad = (_heading * math.pi) / 180;
-    var newLat = _lat + math.cos(rad) * 0.003;
-    var newLng = _lng + math.sin(rad) * 0.003;
-
-    setState(() {
-      _lat = newLat;
-      _lng = newLng;
-      _trail.add(LatLng(newLat, newLng));
       if (_trail.length > 40) _trail.removeAt(0);
     });
     _updateMapElements();
