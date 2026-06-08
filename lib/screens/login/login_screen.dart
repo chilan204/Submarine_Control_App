@@ -69,13 +69,15 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 20, vertical: 25),
-                    child: LoginModeContent(
-                      mode: _mode,
-                      onBackToSelect: _resetToSelect,
-                      onVoiceTap: () => setState(() => _mode = LoginMode.voice),
-                      onPasswordTap: () =>
-                          setState(() =>
-                          _mode = LoginMode.password),
+                    child: SingleChildScrollView(
+                      child: LoginModeContent(
+                        mode: _mode,
+                        onBackToSelect: _resetToSelect,
+                        onVoiceTap: () => setState(() => _mode = LoginMode.voice),
+                        onPasswordTap: () =>
+                            setState(() =>
+                            _mode = LoginMode.password),
+                      ),
                     ),
                   ),
                 ),

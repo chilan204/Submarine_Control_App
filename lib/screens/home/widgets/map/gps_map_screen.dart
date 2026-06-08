@@ -9,7 +9,6 @@ import '../../../../l10n/translations.dart';
 import '../../../../providers/app_provider.dart';
 import '../../../../services/telemetry_service.dart';
 import '../../../../theme.dart';
-import 'widgets/submarine_popup.dart';
 import 'widgets/coordinate_bar.dart';
 import '../metrics_panel.dart';
 import 'widgets/tracking_pill.dart';
@@ -28,17 +27,11 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
   double _depth = -35;
   double _heading = 60;
   double _speed = 4.2;
-  double _pressure = 100.0;
+  double _pressure = 3.5;
 
   // Trail — last 40 positions
-  final List<LatLng> _trail = [
-    const LatLng(10.70, 107.9),
-    const LatLng(10.74, 108.0),
-    const LatLng(10.78, 108.1),
-    const LatLng(10.82, 108.2),
-  ];
+  final List<LatLng> _trail = [];
 
-  bool _showPopup = false;
   Timer? _fallbackTimer;
 
   // MapLibre GL
@@ -216,7 +209,7 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
         SymbolOptions(
           geometry: subPos,
           iconImage: 'submarine-icon',
-          iconSize: 1.0,
+          iconSize: 2.0,
           iconRotate: _heading - 90,
         ),
       );
@@ -226,16 +219,16 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     if (_trailLine != null) {
       await _mapCtrl!.updateLine(
         _trailLine!,
-        LineOptions(lineColor: '#00d4aa', geometry: _trail),
+        LineOptions(lineColor: '#ffa500', geometry: _trail),
       );
     } else {
       _trailLine = await _mapCtrl!.addLine(
         LineOptions(
           geometry: _trail,
-          lineColor: '#00d4aa',
+          lineColor: '#ffa500',
           lineWidth: 2.0,
           lineOpacity: 0.7,
-          linePattern: 'dash',
+          // linePattern: 'dash',
         ),
       );
     }
@@ -273,38 +266,9 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
                 ),
                 onMapCreated: _onMapCreated,
                 onStyleLoadedCallback: _onStyleLoaded,
-                onMapClick: (_, __) => setState(() => _showPopup = false),
                 compassEnabled: false,
                 myLocationEnabled: false,
                 trackCameraPosition: true,
-              ),
-
-              // Submarine popup overlay
-              if (_showPopup)
-                Positioned(
-                  top: 20,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: SubmarinePopup(
-                      lat: _lat,
-                      lng: _lng,
-                      depth: _depth,
-                      speed: _speed,
-                      heading: _heading,
-                      pressure: _pressure,
-                      t: t,
-                    ),
-                  ),
-                ),
-
-              // Tap target for popup toggle on map area
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onDoubleTap: () => setState(() => _showPopup = !_showPopup),
-                  child: const SizedBox.shrink(),
-                ),
               ),
 
               // Live tracking pill (bottom-left) — shows connection status

@@ -70,7 +70,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   String _status = '';
   double _depth = -35;
   double _speed = 4.2;
-  double _heading = 247;
+  double _heading = 60;
   double _pressure = 3.5;
 
   late stt.SpeechToText _speech;

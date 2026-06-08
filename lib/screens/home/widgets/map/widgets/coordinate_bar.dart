@@ -35,8 +35,8 @@ class CoordinateBar extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '${latitude.toStringAsFixed(4)}°N, '
-                      '${longitude.toStringAsFixed(4)}°E',
+                  '${latitude.abs().toStringAsFixed(6)}°${latitude >= 0 ? 'N' : 'S'}, '
+                      '${longitude.abs().toStringAsFixed(6)}°${longitude >= 0 ? 'E' : 'W'}',
                   style: const TextStyle(
                     color: AppColors.accent,
                     fontSize: 12,
