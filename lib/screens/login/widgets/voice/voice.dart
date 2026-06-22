@@ -221,8 +221,6 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
         Text(t.sayPhrase,
             style: const TextStyle(color: AppColors.muted, fontSize: 15)),
         const SizedBox(height: 16),
-        Text(t.voicePhrase,
-            style: const TextStyle(color: AppColors.accent, fontSize: 15)),
         const SizedBox(height: 16),
         MicButton(
           isListening: _isListening || _isVerifying,

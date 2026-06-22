@@ -4,7 +4,7 @@
 
 - Đăng nhập bằng mật khẩu hoặc xác thực giọng nói
 - Điều khiển bằng giọng nói / nhập lệnh (tiếng Việt & English)
-- Bản đồ GPS với vị trí tàu ngầm mô phỏng
+- Bản đồ GPS với vị trí tàu AUV mô phỏng
 - Lịch sử lệnh, lọc, tìm kiếm
 - Chuyển ngôn ngữ VI / EN
 

@@ -11,11 +11,19 @@ import '../../../../models/voice_command_response.dart';
 import '../../../../providers/app_provider.dart';
 import '../../../../services/telemetry_service.dart';
 import '../../../../services/voice_command_service.dart';
+import '../../../../theme.dart';
 import '../../../../utils/audio_file.dart';
 import 'widgets/status_bar.dart';
 import '../metrics_panel.dart';
 import 'widgets/command_log.dart';
 import 'widgets/input_area.dart';
+
+// Command parsing fallback for text input or offline mode
+Map<String, dynamic> _parseCommand(String text, Lang lang) {
+  return lang == Lang.vi
+      ? {'response': 'Lệnh nhận được: "$text". Hệ thống đang xử lý...', 'status': CommandStatus.success}
+      : {'response': 'Command received: "$text". Processing...', 'status': CommandStatus.success};
+}
 
 class VoiceControlScreen extends StatefulWidget {
   const VoiceControlScreen({super.key});
@@ -31,10 +39,12 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   String _transcript = '';
   String _inputText = '';
   String _status = '';
-  double _depth = -35;
-  double _speed = 4.2;
-  double _heading = 60;
-  double _pressure = 3.5;
+  bool _hasData = false;
+  bool _wsConnected = false;
+  double _depth = 0.0;
+  double _speed = 0.0;
+  double _heading = 0.0;
+  double _pressure = 0.0;
 
   late stt.SpeechToText _speech;
   bool _speechReady = false;
@@ -49,6 +59,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   // WebSocket telemetry — shared data source with GpsMapScreen
   late final TelemetryService _telemetry;
   StreamSubscription<TelemetryData>? _telemetrySub;
+  StreamSubscription<bool>? _statusSub;
 
   @override
   void initState() {
@@ -58,8 +69,12 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
 
     // Connect to WebSocket for real-time telemetry
     _telemetry = TelemetryService();
-    _telemetry.connect();
     _telemetrySub = _telemetry.stream.listen(_onTelemetryData);
+    _statusSub = _telemetry.statusStream.listen((connected) {
+      if (!mounted) return;
+      setState(() => _wsConnected = connected);
+    });
+    _telemetry.connect();
   }
 
   Future<void> _initSpeech() async {
@@ -70,6 +85,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   void _onTelemetryData(TelemetryData data) {
     if (!mounted) return;
     setState(() {
+      _hasData = true;
       _depth = data.depth;
       _speed = data.speed;
       _heading = data.heading;
@@ -79,6 +95,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
 
   @override
   void dispose() {
+    _statusSub?.cancel();
     _telemetrySub?.cancel();
     _telemetry.dispose();
     _speech.stop();
@@ -101,15 +118,18 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   }
 
   void _addCommand(String text, AppProvider provider) {
+    final lang = provider.lang;
+    final result = _parseCommand(text, lang);
     final cmd = Command(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: text,
       timestamp: DateTime.now(),
-      status: CommandStatus.success,
-      response: '',
+      status: result['status'] as CommandStatus,
+      response: result['response'] as String,
     );
     provider.addCommand(cmd);
 
+    // Metrics are now driven by WebSocket telemetry — no local mutation
     setState(() {
       _commands.add(cmd);
     });
@@ -149,9 +169,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
 
     if (_speechReady) {
       await _speech.listen(
-        listenOptions: stt.SpeechListenOptions(
-          localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
-        ),
+        localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
         onResult: (result) {
           setState(() => _transcript = result.recognizedWords);
         },
@@ -276,8 +294,39 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<AppProvider>();
+    final lang = provider.lang;
     final t = provider.t;
     if (_status.isEmpty) _status = t.systemReady;
+
+    if (!_hasData) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: AppColors.accent),
+            const SizedBox(height: 16),
+            Text(
+              lang == Lang.vi ? 'Đang chờ dữ liệu tàu ngầm...' : 'Waiting for submarine data...',
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _wsConnected 
+                  ? (lang == Lang.vi ? 'Trạng thái: Đã kết nối máy chủ' : 'Status: Connected to server')
+                  : (lang == Lang.vi ? 'Trạng thái: Đang kết nối...' : 'Status: Connecting...'),
+              style: TextStyle(
+                color: _wsConnected ? AppColors.accent : AppColors.amber,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Column(
       children: [
@@ -301,8 +350,8 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
             scrollController: _scrollCtrl,
             t: t,
             emptyMessage: provider.lang == Lang.vi
-              ? 'Nhấn microphone hoặc nhập lệnh để điều khiển tàu ngầm'
-              : 'Press microphone or type a command to control the submarine',
+              ? 'Nhấn microphone hoặc nhập lệnh để điều khiển AUV'
+              : 'Press microphone or type a command to control the AUV',
           )
         ),
 

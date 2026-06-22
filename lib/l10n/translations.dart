@@ -11,8 +11,8 @@ class AppTranslations {
 
   // Login
   String get loginSubtitle => isVi
-      ? 'HỆ THỐNG ĐIỀU KHIỂN TÀU NGẦM'
-      : 'SUBMARINE CONTROL SYSTEM';
+      ? 'HỆ THỐNG ĐIỀU KHIỂN AUV'
+      : 'AUV CONTROL SYSTEM';
   String get selectAuth =>
       isVi ? 'Chọn phương thức xác thực' : 'Select authentication method';
   String get voiceAuth => isVi ? 'Xác thực giọng nói' : 'Voice Authentication';
@@ -23,6 +23,7 @@ class AppTranslations {
       isVi ? 'Nhập thông tin đăng nhập' : 'Enter credentials';
   String get usernameLabel => isVi ? 'TÊN ĐĂNG NHẬP' : 'USERNAME';
   String get passwordLabel => isVi ? 'MẬT KHẨU' : 'PASSWORD';
+  String get usernameHint => isVi ? 'Nhập tên đăng nhập' : 'Enter username';
   String get authenticate => isVi ? 'XÁC THỰC' : 'AUTHENTICATE';
   String get back => isVi ? '← Quay lại' : '← Go back';
   String get wrongCreds => isVi
@@ -32,8 +33,6 @@ class AppTranslations {
       ? 'Không kết nối được máy chủ. Kiểm tra backend đang chạy.'
       : 'Cannot reach server. Ensure the backend is running.';
   String get sayPhrase => isVi ? 'Hãy nói gì đó' : 'Please say something';
-  String get voicePhrase =>
-      isVi ? '"kích hoạt tàu ngầm"' : '"activate submarine"';
   String get pressmic =>
       isVi ? 'Nhấn microphone để bắt đầu' : 'Press microphone to begin';
   String get listening => isVi ? 'Đang lắng nghe...' : 'Listening...';
@@ -41,21 +40,13 @@ class AppTranslations {
       isVi ? 'Đang xác thực giọng nói...' : 'Verifying voice...';
   String get authSuccess =>
       isVi ? 'Xác thực thành công!' : 'Authentication successful!';
-  String get authFailed => isVi
-      ? 'Cụm từ không khớp. Hãy nói: "kích hoạt tàu ngầm"'
-      : 'Phrase not matched. Say: "activate submarine"';
-  String get online =>
-      isVi ? 'HỆ THỐNG TRỰC TUYẾN' : 'SYSTEM ONLINE';
   String get voiceNotSupported =>
       isVi ? 'Không hỗ trợ nhận dạng giọng nói' : 'Voice recognition not supported';
-  String get voiceError =>
-      isVi ? 'Lỗi nhận dạng. Nhấn mic để thử lại.' : 'Recognition error. Tap mic to retry.';
   String get voiceVerifyFailed =>
       isVi ? 'Xác thực giọng nói thất bại' : 'Voice authentication failed';
 
   // Nav
   String get missionTime => isVi ? 'THỜI GIAN NHIỆM VỤ' : 'MISSION TIME';
-  String get commandCount => isVi ? 'lệnh' : 'cmds';
   String get logout => isVi ? 'Đăng xuất' : 'Logout';
   String get control => isVi ? 'Điều Khiển' : 'Control';
   String get map => isVi ? 'Bản Đồ' : 'Map';
@@ -65,22 +56,13 @@ class AppTranslations {
   String get systemReady => isVi ? 'Hệ thống sẵn sàng' : 'System ready';
   String get listeningCmd =>
       isVi ? 'Đang lắng nghe lệnh...' : 'Listening for commands...';
-  String get cmdReceived => isVi
-      ? 'Lệnh đã nhận. Đang chờ lệnh tiếp theo...'
-      : 'Command received. Awaiting next...';
   String get enterCmd =>
       isVi ? 'Nhập lệnh điều khiển...' : 'Enter control command...';
-  String get cmdHint => isVi
-      ? 'Các lệnh: lặn xuống · nổi lên · tiến · dừng · quay trái/phải · khẩn cấp'
-      : 'Commands: dive · surface · forward · stop · turn left/right · emergency';
   String get systemLabel => isVi ? 'HỆ THỐNG' : 'SYSTEM';
   String get depth => isVi ? 'ĐỘ SÂU' : 'DEPTH';
   String get speed => isVi ? 'TỐC ĐỘ' : 'SPEED';
   String get heading => isVi ? 'HƯỚNG' : 'HEADING';
   String get pressure => isVi ? 'ÁP SUẤT' : 'PRESSURE';
-  List<String> get quickCmds => isVi
-      ? ['Lặn xuống', 'Nổi lên', 'Tiến về phía trước', 'Dừng lại', 'Quay trái', 'Kiểm tra hệ thống']
-      : ['Dive', 'Surface', 'Move Forward', 'Stop', 'Turn Left', 'Check Systems'];
   String get sendingAudio => isVi ? 'Đang gửi âm thanh...' : 'Sending audio...';
   String get processingCmd => isVi ? 'Đang xử lý lệnh...' : 'Processing command...';
   String get cmdExecuted => isVi ? 'Lệnh đã thực thi' : 'Command executed';
@@ -91,12 +73,10 @@ class AppTranslations {
 
   // GPS
   String get currentPos => isVi ? 'VỊ TRÍ HIỆN TẠI' : 'CURRENT POSITION';
-  String get trackingLive => isVi ? 'ĐANG THEO DÕI' : 'TRACKING LIVE';
 
   // History
   String get historyTitle => isVi ? 'Lịch Sử Lệnh' : 'Command History';
   String get historySubtitle => isVi ? 'lệnh đã ghi lại' : 'commands recorded';
-  String get exportReport => isVi ? 'Xuất báo cáo' : 'Export Report';
   String get searchPlaceholder =>
       isVi ? 'Tìm kiếm lệnh hoặc phản hồi...' : 'Search commands or responses...';
   String get all => isVi ? 'Tất cả' : 'All';
@@ -112,7 +92,6 @@ class AppTranslations {
   String get timeHrAgo => isVi ? 'giờ trước' : 'hr ago';
   String get timeDayAgo => isVi ? 'ngày trước' : 'days ago';
   String get cmdId => isVi ? 'ID LỆNH' : 'COMMAND ID';
-  String get sysResponse => isVi ? 'PHẢN HỒI HỆ THỐNG' : 'SYSTEM RESPONSE';
   String get statusLabel => isVi ? 'TRẠNG THÁI' : 'STATUS';
   String get timeLabel => isVi ? 'THỜI GIAN' : 'TIME';
   String get statusSuccess => isVi ? 'Thành công' : 'Success';

@@ -1,15 +1,17 @@
 import 'package:flutter/foundation.dart';
 
-/// Base URL của backend Speech_to_Text (Spring Boot, mặc định port 8080).
+/// Base URL for the Speech-to-Text backend service (Spring Boot, default port: 8080).
 ///
-/// - Android emulator: `10.0.2.2` trỏ tới localhost máy host.
-/// - Windows / iOS simulator / web: `localhost`.
-/// - Thiết bị thật: đổi thành IP LAN của máy chạy backend, ví dụ `http://192.168.1.10:8080`.
+/// Platform-specific host configuration:
+/// - Android Emulator: `10.0.2.2` maps to the host machine's localhost.
+/// - Windows, iOS Simulator, and Web: use `localhost`.
+/// - Physical Device: replace with the LAN IP address of the machine running
+///   the backend service, for example: `http://192.168.1.10:8080`.
 class ApiConfig {
   static const int serverPort = 8080;
 
   static String get baseUrl {
-    return 'http://100.78.229.2:$serverPort';
+    return 'http://100.109.216.26:$serverPort';
   }
 
   /// WebSocket base — derives ws:// from the HTTP baseUrl.

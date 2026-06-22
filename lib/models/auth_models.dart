@@ -89,6 +89,6 @@ class VoiceLoginResult {
   });
 }
 
-/// Giữ alias để tránh đổi nhiều chỗ nếu đã import tên cũ.
+/// Retains the alias for backward compatibility with existing imports.
 typedef LoginData = PasswordLoginData;
 typedef LoginResult = PasswordLoginResult;
