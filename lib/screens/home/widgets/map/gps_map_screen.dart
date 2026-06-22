@@ -8,7 +8,6 @@ import '../../../../l10n/translations.dart';
 import '../../../../providers/app_provider.dart';
 import '../../../../services/telemetry_service.dart';
 import '../../../../theme.dart';
-import 'widgets/submarine_popup.dart';
 import 'widgets/coordinate_bar.dart';
 import '../metrics_panel.dart';
 import 'widgets/tracking_pill.dart';
@@ -271,24 +270,7 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
                 trackCameraPosition: true,
               ),
 
-              // Submarine popup overlay
-              if (_showPopup)
-                Positioned(
-                  top: 20,
-                  left: 0,
-                  right: 0,
-                  child: Center(
-                    child: SubmarinePopup(
-                      lat: _lat,
-                      lng: _lng,
-                      depth: _depth,
-                      speed: _speed,
-                      heading: _heading,
-                      pressure: _pressure,
-                      t: t,
-                    ),
-                  ),
-                ),
+              // Popup has been removed upstream, so no SubmarinePopup here
 
               // Tap target for popup toggle on map area
               Positioned.fill(
@@ -305,8 +287,9 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
                 left: 12,
                 child: TrackingPill(
                   isConnected: _wsConnected,
-                  liveText: lang == Lang.vi ? 'TRỰC TIẾP' : 'LIVE',
-                  simulatedText: lang == Lang.vi ? 'MẤT KẾT NỐI' : 'DISCONNECTED',
+                  liveText: _wsConnected 
+                      ? (lang == Lang.vi ? 'TRỰC TIẾP' : 'LIVE')
+                      : (lang == Lang.vi ? 'MẤT KẾT NỐI' : 'DISCONNECTED'),
                 ),
               ),
 
