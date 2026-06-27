@@ -64,7 +64,12 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     // Track connection status
     _statusSub = _telemetry.statusStream.listen((connected) {
       if (!mounted) return;
-      setState(() => _wsConnected = connected);
+      setState(() {
+        _wsConnected = connected;
+        if (!connected) {
+          _hasData = false;
+        }
+      });
     });
 
     // Start connection AFTER subscribing so we don't miss the first 'true' event

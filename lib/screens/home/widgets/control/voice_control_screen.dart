@@ -72,7 +72,12 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     _telemetrySub = _telemetry.stream.listen(_onTelemetryData);
     _statusSub = _telemetry.statusStream.listen((connected) {
       if (!mounted) return;
-      setState(() => _wsConnected = connected);
+      setState(() {
+        _wsConnected = connected;
+        if (!connected) {
+          _hasData = false;
+        }
+      });
     });
     _telemetry.connect();
   }

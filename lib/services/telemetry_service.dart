@@ -58,8 +58,10 @@ class TelemetryData {
 class TelemetryService {
   WebSocketChannel? _channel;
   Timer? _reconnectTimer;
+  Timer? _watchdogTimer;
   int _reconnectAttempts = 0;
   static const int _maxReconnectDelay = 30; // seconds
+  static const int _watchdogTimeout = 5; // seconds
 
   bool _disposed = false;
   bool _connected = false;
@@ -96,6 +98,7 @@ class TelemetryService {
       _connected = true;
       _reconnectAttempts = 0;
       _statusController.add(true);
+      _resetWatchdog();
       debugPrint('[TelemetryService] Connected ✓');
     } catch (e) {
       debugPrint('[TelemetryService] Connection failed: $e');
@@ -108,9 +111,27 @@ class TelemetryService {
       final json = jsonDecode(raw as String) as Map<String, dynamic>;
       final data = TelemetryData.fromJson(json);
       _dataController.add(data);
+
+      if (!_connected) {
+        _connected = true;
+        _statusController.add(true);
+      }
+      _resetWatchdog();
     } catch (e) {
       debugPrint('[TelemetryService] Parse error: $e — raw: $raw');
     }
+  }
+
+  void _resetWatchdog() {
+    if (_disposed) return;
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer(const Duration(seconds: _watchdogTimeout), () {
+      debugPrint('[TelemetryService] Watchdog timeout: No telemetry data for $_watchdogTimeout seconds');
+      if (_connected) {
+        _connected = false;
+        _statusController.add(false);
+      }
+    });
   }
 
   void _onError(Object error) {
@@ -154,6 +175,7 @@ class TelemetryService {
   void dispose() {
     _disposed = true;
     _reconnectTimer?.cancel();
+    _watchdogTimer?.cancel();
     _channel?.sink.close();
     _dataController.close();
     _statusController.close();
