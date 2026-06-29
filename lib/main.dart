@@ -16,11 +16,11 @@ Future<void> main() async {
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
   ));
-  runApp(const NauticomApp());
+  runApp(const AuvControlSystemApp());
 }
 
-class NauticomApp extends StatelessWidget {
-  const NauticomApp({super.key});
+class AuvControlSystemApp extends StatelessWidget {
+  const AuvControlSystemApp({super.key});
 
   @override
   Widget build(BuildContext context) {

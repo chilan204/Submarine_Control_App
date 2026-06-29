@@ -176,7 +176,9 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
       await _speech.listen(
         localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
         onResult: (result) {
-          setState(() => _transcript = result.recognizedWords);
+          if (_isListening) {
+            setState(() => _transcript = result.recognizedWords);
+          }
         },
       );
     }

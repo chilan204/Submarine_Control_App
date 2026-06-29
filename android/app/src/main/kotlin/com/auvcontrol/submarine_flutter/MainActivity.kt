@@ -1,4 +1,4 @@
-package com.nauticom.submarine_flutter
+package com.auvcontrol.submarine_flutter
 
 import io.flutter.embedding.android.FlutterActivity
 

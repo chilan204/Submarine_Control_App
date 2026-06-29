@@ -56,6 +56,10 @@ class TelemetryData {
 /// - Exposes a [stream] of parsed [TelemetryData] for the UI.
 /// - Can also [send] telemetry data back to the server.
 class TelemetryService {
+  static final TelemetryService _instance = TelemetryService._internal();
+  factory TelemetryService() => _instance;
+  TelemetryService._internal();
+
   WebSocketChannel? _channel;
   Timer? _reconnectTimer;
   Timer? _watchdogTimer;
