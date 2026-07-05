@@ -80,7 +80,7 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
   void dispose() {
     _dataSub?.cancel();
     _statusSub?.cancel();
-    _telemetry.dispose();
+    _telemetry.disconnect();
     super.dispose();
   }
 

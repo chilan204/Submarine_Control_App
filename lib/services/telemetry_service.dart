@@ -175,12 +175,24 @@ class TelemetryService {
     _channel!.sink.add(json);
   }
 
-  /// Close connection and release resources.
-  void dispose() {
-    _disposed = true;
+  /// Disconnect the active WebSocket connection and stop all timers.
+  /// Keep the StreamControllers active so the service can be reconnected.
+  void disconnect() {
     _reconnectTimer?.cancel();
     _watchdogTimer?.cancel();
     _channel?.sink.close();
+    _channel = null;
+    if (_connected) {
+      _connected = false;
+      _statusController.add(false);
+    }
+    debugPrint('[TelemetryService] Disconnected and timers cancelled');
+  }
+
+  /// Close connection and release resources permanently.
+  void dispose() {
+    disconnect();
+    _disposed = true;
     _dataController.close();
     _statusController.close();
   }

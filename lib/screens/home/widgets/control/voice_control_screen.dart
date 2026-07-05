@@ -102,7 +102,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   void dispose() {
     _statusSub?.cancel();
     _telemetrySub?.cancel();
-    _telemetry.dispose();
+    _telemetry.disconnect();
     _speech.stop();
     _audioRecorder.dispose();
     _scrollCtrl.dispose();
