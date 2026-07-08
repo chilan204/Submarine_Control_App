@@ -303,7 +303,9 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     final provider = context.watch<AppProvider>();
     final lang = provider.lang;
     final t = provider.t;
-    if (_status.isEmpty) _status = t.systemReady;
+    if (_status.isEmpty || _status == 'Hệ thống sẵn sàng' || _status == 'System ready') {
+      _status = t.systemReady;
+    }
 
     if (!_hasData) {
       return Center(
