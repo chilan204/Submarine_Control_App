@@ -192,13 +192,13 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     if (_trailLine != null) {
       await _mapCtrl!.updateLine(
         _trailLine!,
-        LineOptions(lineColor: '#00d4aa', geometry: _trail),
+        LineOptions(lineColor: '#FF3D00', geometry: _trail),
       );
     } else {
       _trailLine = await _mapCtrl!.addLine(
         LineOptions(
           geometry: _trail,
-          lineColor: '#00d4aa',
+          lineColor: '#FF3D00',
           lineWidth: 2.0,
           lineOpacity: 0.7,
           // linePattern: 'dash',
