@@ -1,10 +1,12 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:record/record.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+
 import '../../../../l10n/translations.dart';
 import '../../../../models/command.dart';
 import '../../../../models/voice_command_response.dart';
@@ -17,13 +19,6 @@ import 'widgets/status_bar.dart';
 import '../metrics_panel.dart';
 import 'widgets/command_log.dart';
 import 'widgets/input_area.dart';
-
-// Command parsing fallback for text input or offline mode
-Map<String, dynamic> _parseCommand(String text, Lang lang) {
-  return lang == Lang.vi
-      ? {'response': 'Lệnh nhận được: "$text". Hệ thống đang xử lý...', 'status': CommandStatus.success}
-      : {'response': 'Command received: "$text". Processing...', 'status': CommandStatus.success};
-}
 
 class VoiceControlScreen extends StatefulWidget {
   const VoiceControlScreen({super.key});
@@ -79,7 +74,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
         }
       });
     });
-    _telemetry.connect();
+    _telemetry.connect(context.read<AppProvider>().authToken);
   }
 
   Future<void> _initSpeech() async {
@@ -122,15 +117,15 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     });
   }
 
-  void _addCommand(String text, AppProvider provider) {
-    final lang = provider.lang;
-    final result = _parseCommand(text, lang);
+  void _addUnsentCommand(String text, AppProvider provider) {
     final cmd = Command(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       text: text,
       timestamp: DateTime.now(),
-      status: result['status'] as CommandStatus,
-      response: result['response'] as String,
+      status: CommandStatus.error,
+      response: provider.lang == Lang.vi
+          ? 'Lệnh chưa được gửi đến AUV.'
+          : 'The command was not sent to the AUV.',
     );
     provider.addCommand(cmd);
 
@@ -174,7 +169,9 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
 
     if (_speechReady) {
       await _speech.listen(
-        localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
+        listenOptions: stt.SpeechListenOptions(
+          localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
+        ),
         onResult: (result) {
           if (_isListening) {
             setState(() => _transcript = result.recognizedWords);
@@ -214,24 +211,24 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
             _handleApiResponse(result, capturedTranscript, provider);
           }
         } else {
-          // Empty audio file — fallback to local parsing
+          // Never report success for a command that was not sent to the server.
           if (capturedTranscript.isNotEmpty) {
-            _addCommand(capturedTranscript, provider);
+            _addUnsentCommand(capturedTranscript, provider);
           }
         }
       } catch (e) {
         debugPrint('[VoiceControl] Send error: $e');
-        // Fallback to local parsing on network error
+        // Preserve the attempted command, but mark it as not delivered.
         if (capturedTranscript.isNotEmpty && mounted) {
-          _addCommand(capturedTranscript, provider);
+          _addUnsentCommand(capturedTranscript, provider);
         }
       } finally {
         await deleteAudioFile(path);
       }
     } else {
-      // No recording or no token — fallback to local parsing
+      // No recording or no token means nothing reached the AUV.
       if (capturedTranscript.isNotEmpty) {
-        _addCommand(capturedTranscript, provider);
+        _addUnsentCommand(capturedTranscript, provider);
       }
     }
 
@@ -248,6 +245,11 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     String transcript,
     AppProvider provider,
   ) {
+    if (result.unauthorized) {
+      provider.logout();
+      return;
+    }
+
     final t = provider.t;
     final data = result.data;
     final status = data?.status ?? '';
@@ -293,7 +295,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   void _sendTextCommand(AppProvider provider) {
     final text = _textCtrl.text.trim();
     if (text.isEmpty) return;
-    _addCommand(text, provider);
+    _addUnsentCommand(text, provider);
     _textCtrl.clear();
     setState(() => _inputText = '');
   }
@@ -303,7 +305,9 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     final provider = context.watch<AppProvider>();
     final lang = provider.lang;
     final t = provider.t;
-    if (_status.isEmpty || _status == 'Hệ thống sẵn sàng' || _status == 'System ready') {
+    if (_status.isEmpty ||
+        _status == 'Hệ thống sẵn sàng' ||
+        _status == 'System ready') {
       _status = t.systemReady;
     }
 
@@ -316,17 +320,20 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
             const CircularProgressIndicator(color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              lang == Lang.vi ? 'Đang chờ dữ liệu tàu ngầm...' : 'Waiting for submarine data...',
-              style: const TextStyle(
-                color: AppColors.muted,
-                fontSize: 14,
-              ),
+              lang == Lang.vi
+                  ? 'Đang chờ dữ liệu tàu ngầm...'
+                  : 'Waiting for submarine data...',
+              style: const TextStyle(color: AppColors.muted, fontSize: 14),
             ),
             const SizedBox(height: 8),
             Text(
-              _wsConnected 
-                  ? (lang == Lang.vi ? 'Trạng thái: Đã kết nối máy chủ' : 'Status: Connected to server')
-                  : (lang == Lang.vi ? 'Trạng thái: Đang kết nối...' : 'Status: Connecting...'),
+              _wsConnected
+                  ? (lang == Lang.vi
+                      ? 'Trạng thái: Đã kết nối máy chủ'
+                      : 'Status: Connected to server')
+                  : (lang == Lang.vi
+                      ? 'Trạng thái: Đang kết nối...'
+                      : 'Status: Connecting...'),
               style: TextStyle(
                 color: _wsConnected ? AppColors.accent : AppColors.amber,
                 fontSize: 12,
@@ -339,11 +346,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
 
     return Column(
       children: [
-        StatusBar(
-          status: _status,
-          isListening: _isListening,
-        ),
-
+        StatusBar(status: _status, isListening: _isListening),
         MetricsPanel(
           t: t,
           depth: _depth,
@@ -351,7 +354,6 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
           heading: _heading,
           pressure: _pressure,
         ),
-
         Expanded(
           child: CommandLog(
             commands: _commands,
@@ -359,32 +361,27 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
             scrollController: _scrollCtrl,
             t: t,
             emptyMessage: provider.lang == Lang.vi
-              ? 'Nhấn microphone hoặc nhập lệnh để điều khiển AUV'
-              : 'Press microphone or type a command to control the AUV',
-          )
+                ? 'Nhấn microphone hoặc nhập lệnh để điều khiển AUV'
+                : 'Press microphone or type a command to control the AUV',
+          ),
         ),
-
         InputArea(
           t: t,
           isListening: _isListening,
           isSending: _isSending,
           inputText: _inputText,
           textController: _textCtrl,
-
           onMicTap: _isSending
               ? null
               : () => _isListening
-              ? _stopListening(provider)
-              : _startListening(provider),
-
+                  ? _stopListening(provider)
+                  : _startListening(provider),
           onSendTap: () => _sendTextCommand(provider),
-
           onChanged: (value) {
             setState(() {
               _inputText = value;
             });
           },
-
           onSubmitted: (_) {
             _sendTextCommand(provider);
           },

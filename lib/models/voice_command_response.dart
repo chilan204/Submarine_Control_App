@@ -3,11 +3,7 @@ class VoiceCommandDetail {
   final String? direction;
   final int? value;
 
-  const VoiceCommandDetail({
-    this.action,
-    this.direction,
-    this.value,
-  });
+  const VoiceCommandDetail({this.action, this.direction, this.value});
 
   factory VoiceCommandDetail.fromJson(Map<String, dynamic> json) {
     return VoiceCommandDetail(
@@ -26,8 +22,8 @@ class VoiceCommandDetail {
   String toCommandText() {
     final sb = StringBuffer();
     if (action != null) sb.write(action);
-    if (direction != null) sb.write('_${direction}');
-    if (value != null) sb.write('_${value}');
+    if (direction != null) sb.write('_$direction');
+    if (value != null) sb.write('_$value');
     return sb.toString();
   }
 }
@@ -54,7 +50,7 @@ class VoiceCommandResponse {
   factory VoiceCommandResponse.fromJson(Map<String, dynamic> json) {
     return VoiceCommandResponse(
       status: json['status'] as String?,
-      speaker: json['speaker'] as String?,
+      speaker: (json['speaker_id'] ?? json['speaker']) as String?,
       speakerScore: (json['speaker_score'] as num?)?.toDouble(),
       verificationScore: (json['verification_score'] as num?)?.toDouble(),
       text: json['text'] as String?,
@@ -67,7 +63,7 @@ class VoiceCommandResponse {
 
   Map<String, dynamic> toJson() => {
         'status': status,
-        'speaker': speaker,
+        'speaker_id': speaker,
         'speaker_score': speakerScore,
         'verification_score': verificationScore,
         'text': text,
@@ -78,11 +74,13 @@ class VoiceCommandResponse {
 
 class VoiceCommandResult {
   final bool success;
+  final bool unauthorized;
   final VoiceCommandResponse? data;
   final String? message;
 
   const VoiceCommandResult({
     required this.success,
+    this.unauthorized = false,
     this.data,
     this.message,
   });

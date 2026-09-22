@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:maplibre_gl/maplibre_gl.dart';
 import 'package:provider/provider.dart';
+
 import '../../../../l10n/translations.dart';
 import '../../../../providers/app_provider.dart';
 import '../../../../services/telemetry_service.dart';
@@ -73,7 +75,7 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     });
 
     // Start connection AFTER subscribing so we don't miss the first 'true' event
-    _telemetry.connect();
+    _telemetry.connect(context.read<AppProvider>().authToken);
   }
 
   @override
@@ -103,12 +105,12 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
 
-    final cx = size / 2;
-    final cy = size / 2;
+    const cx = size / 2;
+    const cy = size / 2;
 
     // Sonar ring
     canvas.drawCircle(
-      Offset(cx, cy),
+      const Offset(cx, cy),
       16,
       Paint()
         ..color = AppColors.accent.withValues(alpha: 0.3)
@@ -118,14 +120,18 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
 
     // Hull
     canvas.drawOval(
-      Rect.fromCenter(center: Offset(cx, cy + 2), width: 28, height: 12),
+      Rect.fromCenter(
+        center: const Offset(cx, cy + 2),
+        width: 28,
+        height: 12,
+      ),
       Paint()..color = AppColors.accent.withValues(alpha: 0.9),
     );
 
     // Conning tower
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromCenter(center: Offset(cx, cy - 4), width: 8, height: 10),
+        Rect.fromCenter(center: const Offset(cx, cy - 4), width: 8, height: 10),
         const Radius.circular(2),
       ),
       Paint()..color = const Color(0xFF00cc88),
@@ -133,7 +139,7 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
 
     // Center dot
     canvas.drawCircle(
-      Offset(cx, cy + 2),
+      const Offset(cx, cy + 2),
       3,
       Paint()..color = AppColors.background,
     );
@@ -172,10 +178,7 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     if (_submarineSymbol != null) {
       await _mapCtrl!.updateSymbol(
         _submarineSymbol!,
-        SymbolOptions(
-          geometry: subPos,
-          iconRotate: _heading - 90,
-        ),
+        SymbolOptions(geometry: subPos, iconRotate: _heading - 90),
       );
     } else {
       _submarineSymbol = await _mapCtrl!.addSymbol(
@@ -221,17 +224,20 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
             const CircularProgressIndicator(color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              lang == Lang.vi ? 'Đang chờ dữ liệu tàu ngầm...' : 'Waiting for submarine data...',
-              style: const TextStyle(
-                color: AppColors.muted,
-                fontSize: 14,
-              ),
+              lang == Lang.vi
+                  ? 'Đang chờ dữ liệu tàu ngầm...'
+                  : 'Waiting for submarine data...',
+              style: const TextStyle(color: AppColors.muted, fontSize: 14),
             ),
             const SizedBox(height: 8),
             Text(
-              _wsConnected 
-                  ? (lang == Lang.vi ? 'Trạng thái: Đã kết nối máy chủ' : 'Status: Connected to server')
-                  : (lang == Lang.vi ? 'Trạng thái: Đang kết nối...' : 'Status: Connecting...'),
+              _wsConnected
+                  ? (lang == Lang.vi
+                      ? 'Trạng thái: Đã kết nối máy chủ'
+                      : 'Status: Connected to server')
+                  : (lang == Lang.vi
+                      ? 'Trạng thái: Đang kết nối...'
+                      : 'Status: Connecting...'),
               style: TextStyle(
                 color: _wsConnected ? AppColors.accent : AppColors.amber,
                 fontSize: 12,
@@ -249,7 +255,6 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
           longitude: _lng,
           currentPositionLabel: t.currentPos,
         ),
-
         MetricsPanel(
           depth: _depth,
           speed: _speed,
@@ -257,7 +262,6 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
           pressure: _pressure,
           t: t,
         ),
-
         Expanded(
           child: Stack(
             children: [
@@ -292,7 +296,7 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
                 left: 12,
                 child: TrackingPill(
                   isConnected: _wsConnected,
-                  liveText: _wsConnected 
+                  liveText: _wsConnected
                       ? (lang == Lang.vi ? 'TRỰC TIẾP' : 'LIVE')
                       : (lang == Lang.vi ? 'MẤT KẾT NỐI' : 'DISCONNECTED'),
                 ),

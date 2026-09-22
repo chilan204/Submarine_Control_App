@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../../../../theme.dart';
-import '../../../../../providers/app_provider.dart';
 
 class StatusBar extends StatelessWidget {
   final String status;
@@ -25,9 +24,7 @@ class StatusBar extends StatelessWidget {
             height: 8,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: isListening
-                  ? AppColors.accent
-                  : AppColors.muted,
+              color: isListening ? AppColors.accent : AppColors.muted,
             ),
           ),
           const SizedBox(width: 8),

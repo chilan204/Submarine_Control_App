@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/command.dart';
 import '../models/user_session_record.dart';
 import '../services/user_session_service.dart';
+import '../services/api_exception.dart';
 import '../l10n/translations.dart';
 
 // Submarine position state for the GPS map
@@ -72,11 +73,15 @@ class AppProvider extends ChangeNotifier {
   String? get sessionsError => _sessionsError;
 
   void login({
-    String? token,
+    required String token,
     String? username,
     String? name,
     String? role,
   }) {
+    if (token.trim().isEmpty) {
+      throw ArgumentError.value(token, 'token', 'Token must not be empty');
+    }
+    _missionTimer?.cancel();
     _authToken = token;
     _username = username;
     _displayName = name;
@@ -119,6 +124,9 @@ class AppProvider extends ChangeNotifier {
     try {
       final sessions = await _sessionService.fetchMySessions(_authToken!);
       _userSessions = sessions;
+    } on UnauthorizedException {
+      logout();
+      return;
     } catch (e) {
       _sessionsError = e.toString();
     } finally {

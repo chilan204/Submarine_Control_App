@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+
 import '../config/api_config.dart';
 
 /// Telemetry data received from the backend WebSocket.
@@ -64,11 +66,14 @@ class TelemetryService {
   Timer? _reconnectTimer;
   Timer? _watchdogTimer;
   int _reconnectAttempts = 0;
+  int _clients = 0;
   static const int _maxReconnectDelay = 30; // seconds
   static const int _watchdogTimeout = 5; // seconds
 
   bool _disposed = false;
   bool _connected = false;
+  bool _connecting = false;
+  String? _authToken;
   bool get isConnected => _connected;
 
   final _dataController = StreamController<TelemetryData>.broadcast();
@@ -78,33 +83,68 @@ class TelemetryService {
   Stream<bool> get statusStream => _statusController.stream;
 
   /// Connect to the telemetry WebSocket endpoint.
-  void connect() {
+  void connect(String? authToken) {
     if (_disposed) return;
+    _clients++;
+    final tokenChanged = _authToken != null && _authToken != authToken;
+    _authToken = authToken;
+    if (tokenChanged) {
+      _restartConnection();
+      return;
+    }
+    if (_connected || _connecting) return;
     _attemptConnect();
   }
 
-  void _attemptConnect() {
-    if (_disposed) return;
+  Future<void> _attemptConnect() async {
+    if (_disposed || _clients == 0 || _connecting || _connected) return;
+    if (_authToken == null || _authToken!.isEmpty) {
+      _statusController.add(false);
+      return;
+    }
+
+    _connecting = true;
 
     try {
-      final uri = Uri.parse(ApiConfig.telemetryWs);
-      debugPrint('[TelemetryService] Connecting to $uri ...');
+      final baseUri = Uri.parse(ApiConfig.telemetryWs);
+      final uri = baseUri.replace(
+        queryParameters: {
+          ...baseUri.queryParameters,
+          if (_authToken != null && _authToken!.isNotEmpty)
+            'access_token': _authToken!,
+        },
+      );
+      debugPrint(
+        '[TelemetryService] Connecting to ${baseUri.replace(query: '')} ...',
+      );
 
-      _channel = WebSocketChannel.connect(uri);
+      final channel = WebSocketChannel.connect(uri);
+      _channel = channel;
+      await channel.ready;
+      if (_disposed || _clients == 0 || !identical(_channel, channel)) {
+        _connecting = false;
+        await channel.sink.close();
+        return;
+      }
 
-      _channel!.stream.listen(
+      channel.stream.listen(
         _onMessage,
-        onError: _onError,
-        onDone: _onDone,
+        onError: (Object error) => _onError(channel, error),
+        onDone: () => _onDone(channel),
         cancelOnError: false,
       );
 
+      _connecting = false;
       _connected = true;
       _reconnectAttempts = 0;
       _statusController.add(true);
       _resetWatchdog();
       debugPrint('[TelemetryService] Connected ✓');
     } catch (e) {
+      _connecting = false;
+      _connected = false;
+      _channel = null;
+      _statusController.add(false);
       debugPrint('[TelemetryService] Connection failed: $e');
       _scheduleReconnect();
     }
@@ -130,37 +170,63 @@ class TelemetryService {
     if (_disposed) return;
     _watchdogTimer?.cancel();
     _watchdogTimer = Timer(const Duration(seconds: _watchdogTimeout), () {
-      debugPrint('[TelemetryService] Watchdog timeout: No telemetry data for $_watchdogTimeout seconds');
+      debugPrint(
+        '[TelemetryService] Watchdog timeout: No telemetry data for $_watchdogTimeout seconds',
+      );
       if (_connected) {
-        _connected = false;
-        _statusController.add(false);
+        _restartConnection();
       }
     });
   }
 
-  void _onError(Object error) {
+  void _onError(WebSocketChannel channel, Object error) {
+    if (!identical(_channel, channel)) return;
     debugPrint('[TelemetryService] Error: $error');
+    _channel = null;
+    _connecting = false;
     _connected = false;
     _statusController.add(false);
+    channel.sink.close();
+    _scheduleReconnect();
   }
 
-  void _onDone() {
+  void _onDone(WebSocketChannel channel) {
+    if (!identical(_channel, channel)) return;
     debugPrint('[TelemetryService] Disconnected');
+    _channel = null;
+    _connecting = false;
     _connected = false;
     _statusController.add(false);
     _scheduleReconnect();
   }
 
   void _scheduleReconnect() {
-    if (_disposed) return;
+    if (_disposed || _clients == 0) return;
     _reconnectTimer?.cancel();
+    final backoffStep = math.min(_reconnectAttempts, 5);
     final delay = math.min(
-      (1 << _reconnectAttempts).clamp(1, _maxReconnectDelay),
+      1 << backoffStep,
       _maxReconnectDelay,
     );
     _reconnectAttempts++;
-    debugPrint('[TelemetryService] Reconnecting in ${delay}s (attempt $_reconnectAttempts)');
+    debugPrint(
+      '[TelemetryService] Reconnecting in ${delay}s (attempt $_reconnectAttempts)',
+    );
     _reconnectTimer = Timer(Duration(seconds: delay), _attemptConnect);
+  }
+
+  void _restartConnection() {
+    if (_disposed || _clients == 0) return;
+    _watchdogTimer?.cancel();
+    final channel = _channel;
+    _channel = null;
+    _connecting = false;
+    if (_connected) {
+      _connected = false;
+      _statusController.add(false);
+    }
+    channel?.sink.close();
+    _scheduleReconnect();
   }
 
   /// Send telemetry JSON to the server (broadcast to all clients).
@@ -178,10 +244,13 @@ class TelemetryService {
   /// Disconnect the active WebSocket connection and stop all timers.
   /// Keep the StreamControllers active so the service can be reconnected.
   void disconnect() {
+    if (_clients > 0) _clients--;
+    if (_clients > 0) return;
     _reconnectTimer?.cancel();
     _watchdogTimer?.cancel();
     _channel?.sink.close();
     _channel = null;
+    _connecting = false;
     if (_connected) {
       _connected = false;
       _statusController.add(false);
@@ -191,6 +260,7 @@ class TelemetryService {
 
   /// Close connection and release resources permanently.
   void dispose() {
+    _clients = 1;
     disconnect();
     _disposed = true;
     _dataController.close();

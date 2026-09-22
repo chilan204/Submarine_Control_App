@@ -6,18 +6,23 @@ import '../config/api_config.dart';
 import '../models/auth_models.dart';
 
 class AuthApiService {
+  static const _loginTimeout = Duration(seconds: 15);
+  static const _voiceTimeout = Duration(seconds: 60);
+
   Future<PasswordLoginResult> passwordLogin({
     required String username,
     required String password,
   }) async {
-    final response = await http.post(
-      Uri.parse(ApiConfig.passwordLogin),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'username': username.trim(),
-        'password': password,
-      }),
-    );
+    final response = await http
+        .post(
+          Uri.parse(ApiConfig.passwordLogin),
+          headers: const {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'username': username.trim(),
+            'password': password,
+          }),
+        )
+        .timeout(_loginTimeout);
 
     return _parsePasswordResponse(response);
   }
@@ -42,7 +47,7 @@ class AuthApiService {
       request.fields['language'] = language;
     }
 
-    final streamed = await request.send();
+    final streamed = await request.send().timeout(_voiceTimeout);
     final response = await http.Response.fromStream(streamed);
     return _parseVoiceResponse(response);
   }

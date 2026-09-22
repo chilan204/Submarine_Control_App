@@ -80,11 +80,6 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
       return;
     }
 
-    if (!_speechAvailable) {
-      setState(() => _voiceStatus = t.voiceNotSupported);
-      return;
-    }
-
     final dir = await getTemporaryDirectory();
     final path =
         '${dir.path}/voice_login_${DateTime.now().millisecondsSinceEpoch}.wav';
@@ -107,12 +102,18 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
     });
     _pulseCtrl.repeat();
 
-    await _speech.listen(
-      localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
-      onResult: (result) {
-        setState(() => _transcript = result.recognizedWords);
-      },
-    );
+    if (_speechAvailable) {
+      await _speech.listen(
+        listenOptions: stt.SpeechListenOptions(
+          localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
+        ),
+        onResult: (result) {
+          if (mounted) {
+            setState(() => _transcript = result.recognizedWords);
+          }
+        },
+      );
+    }
   }
 
   Future<void> _stopAndVerify(AppTranslations t, Lang lang) async {
@@ -161,7 +162,7 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
         await Future.delayed(const Duration(milliseconds: 800));
         if (!mounted) return;
         context.read<AppProvider>().login(
-              token: result.data!.token,
+              token: result.data!.token!,
               username: result.data!.username,
               name: result.data!.name,
               role: result.data!.role,
@@ -259,8 +260,7 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
               const SizedBox(width: 6),
               Flexible(
                 child: Text(_error,
-                    style: const TextStyle(
-                        color: AppColors.red, fontSize: 12)),
+                    style: const TextStyle(color: AppColors.red, fontSize: 12)),
               ),
             ],
           ),
