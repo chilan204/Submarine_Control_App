@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:http/http.dart' as http;
+import '../config/api_config.dart';
 import 'package:flutter/foundation.dart';
 import '../models/command.dart';
 import '../models/user_session_record.dart';
@@ -55,7 +57,13 @@ class AppProvider extends ChangeNotifier {
   List<UserSessionRecord> _userSessions = [];
   bool _isLoadingSessions = false;
   String? _sessionsError;
-  final UserSessionService _sessionService = UserSessionService();
+  final UserSessionService _sessionService;
+  int _sessionGeneration = 0;
+  int _historyRequest = 0;
+  bool _disposed = false;
+
+  AppProvider({UserSessionService? sessionService})
+      : _sessionService = sessionService ?? UserSessionService();
 
   bool get isLoggedIn => _isLoggedIn;
   String? get authToken => _authToken;
@@ -82,6 +90,11 @@ class AppProvider extends ChangeNotifier {
       throw ArgumentError.value(token, 'token', 'Token must not be empty');
     }
     _missionTimer?.cancel();
+    _sessionGeneration++;
+    _userSessions = [];
+    _commandHistory = [];
+    _isLoadingSessions = false;
+    _sessionsError = null;
     _authToken = token;
     _username = username;
     _displayName = name;
@@ -96,6 +109,13 @@ class AppProvider extends ChangeNotifier {
   }
 
   void logout() {
+    _sessionGeneration++;
+    _isLoadingSessions = false;
+    _sessionsError = null;
+    final token = _authToken;
+    if (token != null) {
+      unawaited(_revokeToken(token));
+    }
     _isLoggedIn = false;
     _authToken = null;
     _username = null;
@@ -110,28 +130,49 @@ class AppProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _revokeToken(String token) async {
+    try {
+      await http.post(
+        Uri.parse('${ApiConfig.baseUrl}/api/auth/logout'),
+        headers: {'Authorization': 'Bearer $token'},
+      ).timeout(const Duration(seconds: 3));
+    } catch (error) {
+      debugPrint('[AppProvider] Logout revocation failed: $error');
+    }
+  }
+
   Future<void> fetchUserSessions() async {
+    if (_disposed) return;
     if (_authToken == null) {
       _sessionsError = 'Not authenticated';
       notifyListeners();
       return;
     }
 
+    final generation = _sessionGeneration;
+    final request = ++_historyRequest;
+    final token = _authToken!;
+    bool isCurrent() => !_disposed && generation == _sessionGeneration && request == _historyRequest;
     _isLoadingSessions = true;
     _sessionsError = null;
     notifyListeners();
 
     try {
-      final sessions = await _sessionService.fetchMySessions(_authToken!);
+      final sessions = await _sessionService.fetchMySessions(token);
+      if (!isCurrent()) return;
       _userSessions = sessions;
     } on UnauthorizedException {
+      if (!isCurrent()) return;
       logout();
       return;
     } catch (e) {
+      if (!isCurrent()) return;
       _sessionsError = e.toString();
     } finally {
-      _isLoadingSessions = false;
-      notifyListeners();
+      if (isCurrent()) {
+        _isLoadingSessions = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -164,6 +205,8 @@ class AppProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _sessionGeneration++;
     _missionTimer?.cancel();
     super.dispose();
   }

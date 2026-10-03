@@ -55,15 +55,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _filter == HistoryFilterType.all ||
           (_filter == HistoryFilterType.successful &&
             cmd.commandStatus == 'EXECUTED') ||
+          (_filter == HistoryFilterType.unconfirmed &&
+            cmd.commandStatus == 'SENT_UNCONFIRMED') ||
           (_filter == HistoryFilterType.unsuccessful &&
-            cmd.commandStatus != 'EXECUTED');
+            cmd.commandStatus != 'EXECUTED' &&
+            cmd.commandStatus != 'SENT_UNCONFIRMED');
       return matchSearch && matchFilter;
     }).toList();
 
     final counts = (
       all: all.length,
       successful: all.where((cmd) => cmd.commandStatus == 'EXECUTED').length,
-      unsuccessful: all.where((cmd) => cmd.commandStatus != 'EXECUTED').length,
+      unconfirmed: all.where((cmd) => cmd.commandStatus == 'SENT_UNCONFIRMED').length,
+      unsuccessful: all.where((cmd) => cmd.commandStatus != 'EXECUTED' && cmd.commandStatus != 'SENT_UNCONFIRMED').length,
     );
 
     return Column(
@@ -73,6 +77,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           total: all.length,
           allCount: counts.all,
           successfulCount: counts.successful,
+          unconfirmedCount: counts.unconfirmed,
           unsuccessfulCount: counts.unsuccessful,
           filter: _filter,
           onFilterChanged: (v) => setState(() => _filter = v),

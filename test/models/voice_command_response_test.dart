@@ -2,6 +2,19 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:submarine_flutter/models/voice_command_response.dart';
 
 void main() {
+  test('audit failure is independent of UDP transmission status', () {
+    final response = VoiceCommandResponse.fromJson({
+      'status': 'SENT_UNCONFIRMED',
+      'auditSaved': false,
+    });
+    expect(response.status, 'SENT_UNCONFIRMED');
+    expect(response.auditSaved, isFalse);
+    expect(response.toJson()['auditSaved'], isFalse);
+    expect(
+        VoiceCommandResponse.fromJson({'status': 'SENT_UNCONFIRMED'})
+            .auditSaved,
+        isNull);
+  });
   test('parses a successful command response', () {
     final response = VoiceCommandResponse.fromJson({
       'status': 'EXECUTED',

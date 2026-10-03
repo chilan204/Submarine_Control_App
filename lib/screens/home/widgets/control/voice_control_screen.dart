@@ -15,6 +15,7 @@ import '../../../../services/telemetry_service.dart';
 import '../../../../services/voice_command_service.dart';
 import '../../../../theme.dart';
 import '../../../../utils/audio_file.dart';
+import '../../../../utils/recording_lifecycle.dart';
 import 'widgets/status_bar.dart';
 import '../metrics_panel.dart';
 import 'widgets/command_log.dart';
@@ -48,6 +49,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
 
   // Audio recording for WAV capture
   final AudioRecorder _audioRecorder = AudioRecorder();
+  final RecordingLifecycle _recording = RecordingLifecycle();
   String? _recordPath;
   final VoiceCommandService _voiceCommandService = VoiceCommandService();
 
@@ -78,7 +80,12 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   }
 
   Future<void> _initSpeech() async {
-    _speechReady = await _speech.initialize();
+    try {
+      final ready = await _speech.initialize();
+      if (mounted) _speechReady = ready;
+    } catch (e) {
+      debugPrint('[VoiceControl] Speech initialization failed: $e');
+    }
   }
 
   /// Update metrics from WebSocket telemetry data.
@@ -98,11 +105,27 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     _statusSub?.cancel();
     _telemetrySub?.cancel();
     _telemetry.disconnect();
-    _speech.stop();
-    _audioRecorder.dispose();
+    unawaited(_recording.dispose(_releaseRecorder).catchError((Object e) {
+      debugPrint('[VoiceControl] Recorder cleanup failed: $e');
+    }));
     _scrollCtrl.dispose();
     _textCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _releaseRecorder() async {
+    try {
+      await _speech.stop();
+    } finally {
+      try {
+        await _audioRecorder.stop();
+      } finally {
+        await _audioRecorder.dispose();
+        final path = _recordPath;
+        _recordPath = null;
+        if (path != null) await deleteAudioFile(path);
+      }
+    }
   }
 
   void _scrollToBottom() {
@@ -137,15 +160,20 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   }
 
   Future<void> _startListening(AppProvider provider) async {
-    if (_isSending) return;
+    if (_isSending || !mounted || !_recording.beginStart()) return;
     final lang = provider.lang;
-
-    // Start WAV recording in parallel with speech-to-text
-    if (!kIsWeb) {
-      try {
-        if (await _audioRecorder.hasPermission()) {
+    final token = provider.authToken;
+    _recordPath = null;
+    setState(() => _transcript = '');
+    try {
+      await _recording.track(() async {
+        if (!kIsWeb) {
+          final permitted = await _audioRecorder.hasPermission();
+          if (!mounted || provider.authToken != token) return;
+          if (!permitted) throw StateError('Microphone permission denied');
           final dir = await getTemporaryDirectory();
-          final path =
+          if (!mounted || provider.authToken != token) return;
+          _recordPath =
               '${dir.path}/voice_cmd_${DateTime.now().millisecondsSinceEpoch}.wav';
           await _audioRecorder.start(
             const RecordConfig(
@@ -153,42 +181,63 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
               sampleRate: 16000,
               numChannels: 1,
             ),
-            path: path,
+            path: _recordPath!,
           );
-          _recordPath = path;
+          if (!mounted) return;
+          if (provider.authToken != token) throw StateError('Session changed');
         }
-      } catch (e) {
-        debugPrint('[VoiceControl] Record start error: $e');
+        if (_speechReady) {
+          await _speech.listen(
+            listenOptions: stt.SpeechListenOptions(
+              localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
+            ),
+            onResult: (result) {
+              if (mounted && _isListening) {
+                setState(() => _transcript = result.recognizedWords);
+              }
+            },
+          );
+          if (!mounted) return;
+          if (provider.authToken != token) throw StateError('Session changed');
+        }
+        _recording.started();
+        setState(() {
+          _isListening = true;
+          _status = provider.t.listeningCmd;
+        });
+      });
+    } catch (e) {
+      debugPrint('[VoiceControl] Record start error: $e');
+      if (mounted) {
+        try {
+          await _recording.track(() async {
+            await _speech.stop();
+            await _audioRecorder.stop();
+            final path = _recordPath;
+            _recordPath = null;
+            if (path != null) await deleteAudioFile(path);
+          });
+        } catch (cleanupError) {
+          debugPrint('[VoiceControl] Start cleanup failed: $cleanupError');
+        }
+        if (mounted) setState(() => _status = provider.t.voiceNotSupported);
       }
-    }
-
-    setState(() {
-      _isListening = true;
-      _status = provider.t.listeningCmd;
-    });
-
-    if (_speechReady) {
-      await _speech.listen(
-        listenOptions: stt.SpeechListenOptions(
-          localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
-        ),
-        onResult: (result) {
-          if (_isListening) {
-            setState(() => _transcript = result.recognizedWords);
-          }
-        },
-      );
+    } finally {
+      if (_recording.isStarting) _recording.finish();
+      if (mounted) setState(() {});
     }
   }
 
   Future<void> _stopListening(AppProvider provider) async {
-    if (!_isListening || _isSending) return;
-
-    _speech.stop();
-    final recordedPath = await _audioRecorder.stop();
-    final path = recordedPath ?? _recordPath;
+    if (!_isListening || _isSending || !_recording.beginStop()) return;
+    final token = provider.authToken;
+    final language = provider.lang == Lang.vi ? 'vi' : 'en';
+    final metadata = CommandRequestMetadata.create();
+    var path = _recordPath;
+    _recordPath = null;
     final capturedTranscript = _transcript;
 
+    // Lock before the first await so rapid taps cannot submit the recording twice.
     setState(() {
       _isListening = false;
       _isSending = true;
@@ -196,18 +245,25 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
       _status = provider.t.sendingAudio;
     });
 
-    // If we have a WAV file AND an auth token, send to backend
-    if (path != null && provider.authToken != null) {
-      try {
+    try {
+      path = await _recording.track(() async {
+            await _speech.stop();
+            return await _audioRecorder.stop();
+          }) ??
+          path;
+      if (!mounted || provider.authToken != token) return;
+      if (path != null && token != null) {
         final bytes = await readAudioBytes(path);
+        if (!mounted || provider.authToken != token) return;
         if (bytes.isNotEmpty) {
           setState(() => _status = provider.t.processingCmd);
           final result = await _voiceCommandService.sendVoiceCommand(
             audioBytes: bytes,
-            token: provider.authToken!,
-            language: provider.lang == Lang.vi ? 'vi' : 'en',
+            token: token,
+            language: language,
+            metadata: metadata,
           );
-          if (mounted) {
+          if (mounted && provider.authToken == token) {
             _handleApiResponse(result, capturedTranscript, provider);
           }
         } else {
@@ -216,27 +272,29 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
             _addUnsentCommand(capturedTranscript, provider);
           }
         }
-      } catch (e) {
-        debugPrint('[VoiceControl] Send error: $e');
-        // Preserve the attempted command, but mark it as not delivered.
-        if (capturedTranscript.isNotEmpty && mounted) {
-          _addUnsentCommand(capturedTranscript, provider);
-        }
-      } finally {
-        await deleteAudioFile(path);
-      }
-    } else {
-      // No recording or no token means nothing reached the AUV.
-      if (capturedTranscript.isNotEmpty) {
+      } else if (capturedTranscript.isNotEmpty) {
+        // No recording or no token means nothing reached the server.
         _addUnsentCommand(capturedTranscript, provider);
       }
-    }
-
-    if (mounted) {
-      setState(() {
-        _isSending = false;
-        _status = provider.t.systemReady;
-      });
+    } catch (e) {
+      debugPrint('[VoiceControl] Recording error: $e');
+      if (capturedTranscript.isNotEmpty &&
+          mounted &&
+          provider.authToken == token) {
+        _addUnsentCommand(capturedTranscript, provider);
+      }
+    } finally {
+      try {
+        if (path != null) await deleteAudioFile(path);
+      } finally {
+        _recording.finish();
+        if (mounted) {
+          setState(() {
+            _isSending = false;
+            _status = provider.t.systemReady;
+          });
+        }
+      }
     }
   }
 
@@ -258,13 +316,25 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     CommandStatus cmdStatus;
     String response;
 
-    if (result.success && status == 'EXECUTED') {
-      cmdStatus = CommandStatus.success;
+    if (result.success && status == 'SENT_UNCONFIRMED') {
+      cmdStatus = CommandStatus.warning;
       final detail = data?.command;
       response = detail != null
-          ? '${t.cmdExecuted}: ${detail.action ?? ''} ${detail.direction ?? ''} ${detail.value ?? ''}'
+          ? '${provider.lang == Lang.vi ? 'Đã gửi (chưa xác nhận AUV)' : 'Sent (AUV unconfirmed)'}: ${detail.action ?? ''} ${detail.direction ?? ''}'
               .trim()
-          : t.cmdExecuted;
+          : (provider.lang == Lang.vi
+              ? 'Đã gửi, chưa xác nhận AUV'
+              : 'Sent, AUV unconfirmed');
+    } else if (status == 'COMMAND_EXPIRED') {
+      cmdStatus = CommandStatus.warning;
+      response = provider.lang == Lang.vi
+          ? 'Lệnh đã hết hạn; không gửi thêm đến AUV.'
+          : 'Command expired; no further transmission to the AUV.';
+    } else if (status == 'DUPLICATE_REQUEST' || status == 'OUTCOME_UNKNOWN') {
+      cmdStatus = CommandStatus.warning;
+      response = provider.lang == Lang.vi
+          ? 'Chưa xác định được kết quả gửi lệnh. Kiểm tra trạng thái AUV trước khi ra lệnh mới.'
+          : 'Transmission outcome unknown. Check the AUV before issuing a new command.';
     } else if (status == 'SPEAKER_VERIFICATION_FAILED') {
       cmdStatus = CommandStatus.error;
       response = t.speakerFailed;
@@ -277,6 +347,12 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     } else {
       cmdStatus = CommandStatus.error;
       response = result.message ?? t.cmdRejected;
+    }
+
+    if (data?.auditSaved == false) {
+      response += provider.lang == Lang.vi
+          ? ' Không lưu được lịch sử trên máy chủ; không gửi lại lệnh chỉ để lưu lịch sử.'
+          : ' Server history could not be saved; do not resend just to save history.';
     }
 
     final cmd = Command(
@@ -368,10 +444,10 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
         InputArea(
           t: t,
           isListening: _isListening,
-          isSending: _isSending,
+          isSending: _isSending || _recording.isStarting,
           inputText: _inputText,
           textController: _textCtrl,
-          onMicTap: _isSending
+          onMicTap: _isSending || _recording.isStarting
               ? null
               : () => _isListening
                   ? _stopListening(provider)

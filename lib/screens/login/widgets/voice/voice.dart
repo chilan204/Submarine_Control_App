@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
@@ -10,6 +11,7 @@ import 'package:submarine_flutter/theme.dart';
 import 'package:submarine_flutter/utils/audio_file.dart';
 import '../../../../l10n/translations.dart';
 import '../../../../providers/app_provider.dart';
+import '../../../../utils/recording_lifecycle.dart';
 
 class Voice extends StatefulWidget {
   const Voice({super.key, required this.onBack});
@@ -23,6 +25,7 @@ class Voice extends StatefulWidget {
 class _VoiceState extends State<Voice> with TickerProviderStateMixin {
   final _authApi = AuthApiService();
   final _audioRecorder = AudioRecorder();
+  final _recording = RecordingLifecycle();
 
   String _error = '';
   bool _isListening = false;
@@ -47,102 +50,153 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
   }
 
   Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize();
+    try {
+      final available = await _speech.initialize();
+      if (mounted) _speechAvailable = available;
+    } catch (e) {
+      debugPrint('[VoiceLogin] Speech initialization failed: $e');
+    }
   }
 
   @override
   void dispose() {
     _pulseCtrl.dispose();
-    _speech.stop();
-    _audioRecorder.dispose();
+    unawaited(_recording.dispose(_releaseRecorder).catchError((Object e) {
+      debugPrint('[VoiceLogin] Recorder cleanup failed: $e');
+    }));
     super.dispose();
   }
 
+  Future<void> _releaseRecorder() async {
+    try {
+      await _speech.stop();
+    } finally {
+      try {
+        await _audioRecorder.stop();
+      } finally {
+        await _audioRecorder.dispose();
+        final path = _recordPath;
+        _recordPath = null;
+        if (path != null) await deleteAudioFile(path);
+      }
+    }
+  }
+
   void _handleBack() {
-    if (_isVerifying) return;
-    _speech.stop();
-    _audioRecorder.stop();
+    if (_isVerifying || _isListening || _recording.isStarting) return;
     _pulseCtrl.stop();
     _pulseCtrl.reset();
     widget.onBack();
   }
 
   Future<void> _startVoiceRecognition(AppTranslations t, Lang lang) async {
-    if (_isVerifying) return;
+    if (_isVerifying || !mounted || !_recording.beginStart()) return;
+    setState(() => _error = '');
+    try {
+      await _recording.track(() async {
+        if (kIsWeb) {
+          setState(() => _voiceStatus = t.voiceNotSupported);
+          return;
+        }
 
-    if (kIsWeb) {
-      setState(() => _voiceStatus = t.voiceNotSupported);
-      return;
-    }
+        final permitted = await _audioRecorder.hasPermission();
+        if (!mounted) return;
+        if (!permitted) {
+          setState(() => _voiceStatus = t.voiceNotSupported);
+          return;
+        }
 
-    if (!await _audioRecorder.hasPermission()) {
-      setState(() => _voiceStatus = t.voiceNotSupported);
-      return;
-    }
+        final dir = await getTemporaryDirectory();
+        if (!mounted) return;
+        final path =
+            '${dir.path}/voice_login_${DateTime.now().millisecondsSinceEpoch}.wav';
+        _recordPath = path;
 
-    final dir = await getTemporaryDirectory();
-    final path =
-        '${dir.path}/voice_login_${DateTime.now().millisecondsSinceEpoch}.wav';
+        await _audioRecorder.start(
+          const RecordConfig(
+            encoder: AudioEncoder.wav,
+            sampleRate: 16000,
+            numChannels: 1,
+          ),
+          path: path,
+        );
+        if (!mounted) return;
 
-    await _audioRecorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.wav,
-        sampleRate: 16000,
-        numChannels: 1,
-      ),
-      path: path,
-    );
-    _recordPath = path;
-
-    setState(() {
-      _isListening = true;
-      _voiceStatus = t.listening;
-      _transcript = '';
-      _error = '';
-    });
-    _pulseCtrl.repeat();
-
-    if (_speechAvailable) {
-      await _speech.listen(
-        listenOptions: stt.SpeechListenOptions(
-          localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
-        ),
-        onResult: (result) {
-          if (mounted) {
-            setState(() => _transcript = result.recognizedWords);
-          }
-        },
-      );
+        if (_speechAvailable) {
+          await _speech.listen(
+            listenOptions: stt.SpeechListenOptions(
+              localeId: lang == Lang.vi ? 'vi_VN' : 'en_US',
+            ),
+            onResult: (result) {
+              if (mounted && _isListening) {
+                setState(() => _transcript = result.recognizedWords);
+              }
+            },
+          );
+          if (!mounted) return;
+        }
+        _recording.started();
+        setState(() {
+          _isListening = true;
+          _voiceStatus = t.listening;
+          _transcript = '';
+          _error = '';
+        });
+        _pulseCtrl.repeat();
+      });
+    } catch (e) {
+      debugPrint('[VoiceLogin] Recording start failed: $e');
+      if (mounted) {
+        try {
+          await _recording.track(() async {
+            await _speech.stop();
+            await _audioRecorder.stop();
+            final path = _recordPath;
+            _recordPath = null;
+            if (path != null) await deleteAudioFile(path);
+          });
+        } catch (cleanupError) {
+          debugPrint('[VoiceLogin] Start cleanup failed: $cleanupError');
+        }
+        if (mounted) setState(() => _error = t.voiceVerifyFailed);
+      }
+    } finally {
+      if (_recording.isStarting) _recording.finish();
+      if (mounted) setState(() {});
     }
   }
 
   Future<void> _stopAndVerify(AppTranslations t, Lang lang) async {
-    if (!_isListening || _isVerifying) return;
-
-    _speech.stop();
-    final recordedPath = await _audioRecorder.stop();
-    _pulseCtrl.stop();
-    _pulseCtrl.reset();
-
-    final path = recordedPath ?? _recordPath;
-    if (path == null) {
-      setState(() {
-        _isListening = false;
-        _voiceStatus = t.pressmic;
-        _error = t.voiceVerifyFailed;
-      });
-      return;
-    }
-
+    if (!_isListening || _isVerifying || !_recording.beginStop()) return;
+    // Lock before stopping either plugin: a second tap must not submit twice.
     setState(() {
       _isListening = false;
       _isVerifying = true;
       _voiceStatus = t.verifying;
       _error = '';
     });
-
+    _pulseCtrl.stop();
+    _pulseCtrl.reset();
+    var path = _recordPath;
+    _recordPath = null;
     try {
+      path = await _recording.track(() async {
+            await _speech.stop();
+            return await _audioRecorder.stop();
+          }) ??
+          path;
+      if (!mounted) return;
+      if (path == null) {
+        setState(() {
+          _isListening = false;
+          _voiceStatus = t.pressmic;
+          _error = t.voiceVerifyFailed;
+        });
+        return;
+      }
+
       final bytes = await readAudioBytes(path);
+      if (!mounted) return;
       if (bytes.isEmpty) {
         setState(() {
           _error = t.voiceVerifyFailed;
@@ -181,6 +235,7 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
         _voiceStatus = t.pressmic;
       });
     } finally {
+      _recording.finish();
       if (mounted) {
         setState(() {
           _isVerifying = false;
@@ -189,7 +244,7 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
           }
         });
       }
-      await deleteAudioFile(path);
+      if (path != null) await deleteAudioFile(path);
     }
   }
 
@@ -205,7 +260,7 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
 
     if (_voiceStatus.isEmpty) _voiceStatus = t.pressmic;
 
-    final busy = _isListening || _isVerifying;
+    final busy = _isListening || _isVerifying || _recording.isStarting;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -226,9 +281,11 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
         MicButton(
           isListening: _isListening || _isVerifying,
           pulseController: _pulseCtrl,
-          onTap: () => _isListening
-              ? _stopListening(t, lang)
-              : _startVoiceRecognition(t, lang),
+          onTap: _isVerifying || _recording.isStarting
+              ? null
+              : () => _isListening
+                  ? _stopListening(t, lang)
+                  : _startVoiceRecognition(t, lang),
         ),
         const SizedBox(height: 16),
         Text(_voiceStatus,

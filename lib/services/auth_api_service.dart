@@ -7,7 +7,14 @@ import '../models/auth_models.dart';
 
 class AuthApiService {
   static const _loginTimeout = Duration(seconds: 15);
-  static const _voiceTimeout = Duration(seconds: 60);
+  final Duration _voiceTimeout;
+  final http.Client Function() _clientFactory;
+
+  AuthApiService({
+    Duration voiceTimeout = const Duration(seconds: 60),
+    http.Client Function()? clientFactory,
+  })  : _voiceTimeout = voiceTimeout,
+        _clientFactory = clientFactory ?? http.Client.new;
 
   Future<PasswordLoginResult> passwordLogin({
     required String username,
@@ -47,9 +54,17 @@ class AuthApiService {
       request.fields['language'] = language;
     }
 
-    final streamed = await request.send().timeout(_voiceTimeout);
-    final response = await http.Response.fromStream(streamed);
-    return _parseVoiceResponse(response);
+    final client = _clientFactory();
+    try {
+      final response = await (() async {
+        final streamed = await client.send(request);
+        return await http.Response.fromStream(streamed);
+      })()
+          .timeout(_voiceTimeout);
+      return _parseVoiceResponse(response);
+    } finally {
+      client.close();
+    }
   }
 
   PasswordLoginResult _parsePasswordResponse(http.Response response) {

@@ -9,6 +9,7 @@ class HistoryHeader extends StatelessWidget {
   final int total;
   final int allCount;
   final int successfulCount;
+  final int unconfirmedCount;
   final int unsuccessfulCount;
 
   final HistoryFilterType filter;
@@ -25,6 +26,7 @@ class HistoryHeader extends StatelessWidget {
     required this.total,
     required this.allCount,
     required this.successfulCount,
+    required this.unconfirmedCount,
     required this.unsuccessfulCount,
     required this.filter,
     required this.onFilterChanged,
@@ -84,6 +86,15 @@ class HistoryHeader extends StatelessWidget {
                 label: t.successful,
                 count: successfulCount,
                 activeColor: AppColors.accent,
+                onTap: onFilterChanged,
+              ),
+              const SizedBox(width: 8),
+              HistoryFilterTab(
+                type: HistoryFilterType.unconfirmed,
+                selectedFilter: filter,
+                label: t.isVi ? 'Chưa xác nhận' : 'Unconfirmed',
+                count: unconfirmedCount,
+                activeColor: AppColors.amber,
                 onTap: onFilterChanged,
               ),
               const SizedBox(width: 8),

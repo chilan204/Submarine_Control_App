@@ -11,7 +11,7 @@ class MicButton extends StatelessWidget {
 
   final bool isListening;
   final AnimationController pulseController;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +41,8 @@ class MicButton extends StatelessWidget {
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
                               border: Border.all(
-                                  color: AppColors.accent.withValues(alpha: 0.4),
+                                  color:
+                                      AppColors.accent.withValues(alpha: 0.4),
                                   width: 1.5),
                             ),
                           ),

@@ -30,6 +30,7 @@ class VoiceCommandDetail {
 
 class VoiceCommandResponse {
   final String? status;
+  final bool? auditSaved;
   final String? speaker;
   final double? speakerScore;
   final double? verificationScore;
@@ -39,6 +40,7 @@ class VoiceCommandResponse {
 
   const VoiceCommandResponse({
     this.status,
+    this.auditSaved,
     this.speaker,
     this.speakerScore,
     this.verificationScore,
@@ -50,6 +52,7 @@ class VoiceCommandResponse {
   factory VoiceCommandResponse.fromJson(Map<String, dynamic> json) {
     return VoiceCommandResponse(
       status: json['status'] as String?,
+      auditSaved: json['auditSaved'] as bool?,
       speaker: (json['speaker_id'] ?? json['speaker']) as String?,
       speakerScore: (json['speaker_score'] as num?)?.toDouble(),
       verificationScore: (json['verification_score'] as num?)?.toDouble(),
@@ -63,6 +66,7 @@ class VoiceCommandResponse {
 
   Map<String, dynamic> toJson() => {
         'status': status,
+        'auditSaved': auditSaved,
         'speaker_id': speaker,
         'speaker_score': speakerScore,
         'verification_score': verificationScore,

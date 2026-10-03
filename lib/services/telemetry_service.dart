@@ -73,6 +73,7 @@ class TelemetryService {
   bool _disposed = false;
   bool _connected = false;
   bool _connecting = false;
+  int _connectionGeneration = 0;
   String? _authToken;
   bool get isConnected => _connected;
 
@@ -104,6 +105,7 @@ class TelemetryService {
     }
 
     _connecting = true;
+    final generation = _connectionGeneration;
 
     try {
       final baseUri = Uri.parse(ApiConfig.telemetryWs);
@@ -122,13 +124,15 @@ class TelemetryService {
       _channel = channel;
       await channel.ready;
       if (_disposed || _clients == 0 || !identical(_channel, channel)) {
-        _connecting = false;
+        if (identical(_channel, channel)) _connecting = false;
         await channel.sink.close();
         return;
       }
 
       channel.stream.listen(
-        _onMessage,
+        (raw) {
+          if (identical(_channel, channel)) _onMessage(raw);
+        },
         onError: (Object error) => _onError(channel, error),
         onDone: () => _onDone(channel),
         cancelOnError: false,
@@ -141,6 +145,7 @@ class TelemetryService {
       _resetWatchdog();
       debugPrint('[TelemetryService] Connected ✓');
     } catch (e) {
+      if (generation != _connectionGeneration) return;
       _connecting = false;
       _connected = false;
       _channel = null;
@@ -217,6 +222,7 @@ class TelemetryService {
 
   void _restartConnection() {
     if (_disposed || _clients == 0) return;
+    _connectionGeneration++;
     _watchdogTimer?.cancel();
     final channel = _channel;
     _channel = null;
@@ -246,6 +252,7 @@ class TelemetryService {
   void disconnect() {
     if (_clients > 0) _clients--;
     if (_clients > 0) return;
+    _connectionGeneration++;
     _reconnectTimer?.cancel();
     _watchdogTimer?.cancel();
     _channel?.sink.close();

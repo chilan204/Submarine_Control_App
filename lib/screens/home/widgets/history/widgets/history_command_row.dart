@@ -22,20 +22,21 @@ class HistoryCommandRow extends StatelessWidget {
   Color get _color {
     final status = cmd.commandStatus;
     if (status == 'EXECUTED') return AppColors.accent;
-    if (status == 'WARNING') return AppColors.amber;
+    if (status == 'WARNING' || status == 'SENT_UNCONFIRMED') return AppColors.amber;
     return AppColors.red;
   }
 
   IconData get _icon {
     final status = cmd.commandStatus;
     if (status == 'EXECUTED') return Icons.check_circle_outline;
-    if (status == 'WARNING') return Icons.warning_amber_rounded;
+    if (status == 'WARNING' || status == 'SENT_UNCONFIRMED') return Icons.warning_amber_rounded;
     return Icons.warning_rounded;
   }
 
   String get _statusLabel {
     final status = cmd.commandStatus;
     if (status == 'EXECUTED') return t.statusSuccess;
+    if (status == 'SENT_UNCONFIRMED') return t.isVi ? 'Đã gửi, chưa xác nhận AUV' : 'Sent, AUV unconfirmed';
     if (status == 'WARNING') return t.statusWarning;
     return t.statusError;
   }
