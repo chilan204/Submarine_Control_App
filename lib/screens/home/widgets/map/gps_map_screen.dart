@@ -13,6 +13,7 @@ import '../../../../theme.dart';
 import 'widgets/coordinate_bar.dart';
 import '../metrics_panel.dart';
 import 'widgets/tracking_pill.dart';
+import 'widgets/telemetry_map_visibility.dart';
 
 class GpsMapScreen extends StatefulWidget {
   const GpsMapScreen({super.key});
@@ -41,6 +42,8 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
   bool _mapReady = false;
   Symbol? _submarineSymbol;
   Line? _trailLine;
+  bool _mapUpdateInProgress = false;
+  bool _mapUpdatePending = false;
 
   // WebSocket telemetry
   late final TelemetryService _telemetry;
@@ -88,18 +91,29 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
 
   /// Called when the MapLibre map is fully initialized.
   void _onMapCreated(MapLibreMapController controller) {
+    _mapReady = false;
+    _submarineSymbol = null;
+    _trailLine = null;
     _mapCtrl = controller;
   }
 
   /// Called when the map style is loaded and ready for layers/symbols.
   Future<void> _onStyleLoaded() async {
-    _mapReady = true;
-    await _addSubmarineImage();
-    await _updateMapElements();
+    final controller = _mapCtrl;
+    if (controller == null || !mounted) return;
+    _mapReady = false;
+    try {
+      await _addSubmarineImage(controller);
+      if (!mounted || !identical(controller, _mapCtrl)) return;
+      _mapReady = true;
+      await _updateMapElements();
+    } catch (error) {
+      debugPrint('Map style initialization failed: $error');
+    }
   }
 
   /// Renders the submarine icon widget to a PNG and registers it with the map.
-  Future<void> _addSubmarineImage() async {
+  Future<void> _addSubmarineImage(MapLibreMapController controller) async {
     // Create a submarine icon as a simple painted image
     const size = 48.0;
     final recorder = ui.PictureRecorder();
@@ -149,7 +163,10 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
     final bytes = byteData!.buffer.asUint8List();
 
-    await _mapCtrl?.addImage('submarine-icon', bytes);
+    img.dispose();
+    picture.dispose();
+    if (!mounted || !identical(controller, _mapCtrl)) return;
+    await controller.addImage('submarine-icon', bytes);
   }
 
   /// Called when a telemetry message arrives from the WebSocket.
@@ -171,42 +188,50 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
 
   /// Syncs the submarine marker and trail line on the MapLibre map.
   Future<void> _updateMapElements() async {
-    if (!_mapReady || _mapCtrl == null) return;
-
-    // Update or create submarine marker
-    final subPos = LatLng(_lat, _lng);
-    if (_submarineSymbol != null) {
-      await _mapCtrl!.updateSymbol(
-        _submarineSymbol!,
-        SymbolOptions(geometry: subPos, iconRotate: _heading - 90),
-      );
-    } else {
-      _submarineSymbol = await _mapCtrl!.addSymbol(
-        SymbolOptions(
-          geometry: subPos,
-          iconImage: 'submarine-icon',
-          iconSize: 1.0,
-          iconRotate: _heading - 90,
-        ),
-      );
-    }
-
-    // Update or create trail polyline
-    if (_trailLine != null) {
-      await _mapCtrl!.updateLine(
-        _trailLine!,
-        LineOptions(lineColor: '#FF3D00', geometry: _trail),
-      );
-    } else {
-      _trailLine = await _mapCtrl!.addLine(
-        LineOptions(
-          geometry: _trail,
-          lineColor: '#FF3D00',
-          lineWidth: 2.0,
-          lineOpacity: 0.7,
-          // linePattern: 'dash',
-        ),
-      );
+    _mapUpdatePending = true;
+    if (_mapUpdateInProgress) return;
+    _mapUpdateInProgress = true;
+    try {
+      while (_mapUpdatePending && mounted && _hasData && _mapReady) {
+        _mapUpdatePending = false;
+        final controller = _mapCtrl;
+        if (controller == null) return;
+        final position = LatLng(_lat, _lng);
+        final trail = List<LatLng>.of(_trail);
+        final symbol = _submarineSymbol;
+        if (symbol == null) {
+          final created = await controller.addSymbol(SymbolOptions(
+            geometry: position,
+            iconImage: 'submarine-icon',
+            iconSize: 1.0,
+            iconRotate: _heading - 90,
+          ));
+          if (!mounted || !identical(controller, _mapCtrl)) continue;
+          _submarineSymbol = created;
+        } else {
+          await controller.updateSymbol(symbol,
+              SymbolOptions(geometry: position, iconRotate: _heading - 90));
+        }
+        if (!mounted || !identical(controller, _mapCtrl) || !_hasData) continue;
+        final line = _trailLine;
+        if (line == null) {
+          final created = await controller.addLine(LineOptions(
+            geometry: trail,
+            lineColor: '#FF3D00',
+            lineWidth: 2.0,
+            lineOpacity: 0.7,
+          ));
+          if (!mounted || !identical(controller, _mapCtrl)) continue;
+          _trailLine = created;
+        } else {
+          await controller.updateLine(
+              line, LineOptions(lineColor: '#FF3D00', geometry: trail));
+        }
+      }
+    } catch (error) {
+      debugPrint('Map telemetry update failed: $error');
+    } finally {
+      _mapUpdateInProgress = false;
     }
   }
 
@@ -215,109 +240,111 @@ class _GpsMapScreenState extends State<GpsMapScreen> {
     final t = context.watch<AppProvider>().t;
     final lang = context.watch<AppProvider>().lang;
 
-    if (!_hasData) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(color: AppColors.accent),
-            const SizedBox(height: 16),
-            Text(
-              lang == Lang.vi
-                  ? 'Đang chờ dữ liệu tàu ngầm...'
-                  : 'Waiting for submarine data...',
-              style: const TextStyle(color: AppColors.muted, fontSize: 14),
+    final waiting = Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircularProgressIndicator(color: AppColors.accent),
+          const SizedBox(height: 16),
+          Text(
+            lang == Lang.vi
+                ? 'Đang chờ dữ liệu tàu ngầm...'
+                : 'Waiting for submarine data...',
+            style: const TextStyle(color: AppColors.muted, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _wsConnected
+                ? (lang == Lang.vi
+                    ? 'Trạng thái: Đã kết nối máy chủ'
+                    : 'Status: Connected to server')
+                : (lang == Lang.vi
+                    ? 'Trạng thái: Đang kết nối...'
+                    : 'Status: Connecting...'),
+            style: TextStyle(
+              color: _wsConnected ? AppColors.accent : AppColors.amber,
+              fontSize: 12,
             ),
-            const SizedBox(height: 8),
-            Text(
-              _wsConnected
-                  ? (lang == Lang.vi
-                      ? 'Trạng thái: Đã kết nối máy chủ'
-                      : 'Status: Connected to server')
-                  : (lang == Lang.vi
-                      ? 'Trạng thái: Đang kết nối...'
-                      : 'Status: Connecting...'),
-              style: TextStyle(
-                color: _wsConnected ? AppColors.accent : AppColors.amber,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+          ),
+        ],
+      ),
+    );
 
-    return Column(
-      children: [
-        CoordinateBar(
-          latitude: _lat,
-          longitude: _lng,
-          currentPositionLabel: t.currentPos,
-        ),
-        MetricsPanel(
-          depth: _depth,
-          speed: _speed,
-          heading: _heading,
-          pressure: _pressure,
-          t: t,
-        ),
-        Expanded(
-          child: Stack(
-            children: [
-              MapLibreMap(
-                styleString: _goongStyleUrl,
-                initialCameraPosition: CameraPosition(
-                  target: LatLng(_lat, _lng),
-                  zoom: 7,
+    return TelemetryMapVisibility(
+      hasData: _hasData,
+      waiting: waiting,
+      child: Column(
+        children: [
+          CoordinateBar(
+            latitude: _lat,
+            longitude: _lng,
+            currentPositionLabel: t.currentPos,
+          ),
+          MetricsPanel(
+            depth: _depth,
+            speed: _speed,
+            heading: _heading,
+            pressure: _pressure,
+            t: t,
+          ),
+          Expanded(
+            child: Stack(
+              children: [
+                MapLibreMap(
+                  styleString: _goongStyleUrl,
+                  initialCameraPosition: CameraPosition(
+                    target: LatLng(_lat, _lng),
+                    zoom: 7,
+                  ),
+                  onMapCreated: _onMapCreated,
+                  onStyleLoadedCallback: _onStyleLoaded,
+                  onMapClick: (_, __) => setState(() => _showPopup = false),
+                  compassEnabled: false,
+                  myLocationEnabled: false,
+                  trackCameraPosition: true,
                 ),
-                onMapCreated: _onMapCreated,
-                onStyleLoadedCallback: _onStyleLoaded,
-                onMapClick: (_, __) => setState(() => _showPopup = false),
-                compassEnabled: false,
-                myLocationEnabled: false,
-                trackCameraPosition: true,
-              ),
 
-              // Popup has been removed upstream, so no SubmarinePopup here
+                // Popup has been removed upstream, so no SubmarinePopup here
 
-              // Tap target for popup toggle on map area
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onDoubleTap: () => setState(() => _showPopup = !_showPopup),
-                  child: const SizedBox.shrink(),
-                ),
-              ),
-
-              // Live tracking pill (bottom-left) — shows connection status
-              Positioned(
-                bottom: 12,
-                left: 12,
-                child: TrackingPill(
-                  isConnected: _wsConnected,
-                  liveText: _wsConnected
-                      ? (lang == Lang.vi ? 'TRỰC TIẾP' : 'LIVE')
-                      : (lang == Lang.vi ? 'MẤT KẾT NỐI' : 'DISCONNECTED'),
-                ),
-              ),
-
-              // Goong attribution (bottom-right)
-              Positioned(
-                bottom: 4,
-                right: 8,
-                child: Text(
-                  '© Goong',
-                  style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 8,
+                // Tap target for popup toggle on map area
+                Positioned.fill(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onDoubleTap: () => setState(() => _showPopup = !_showPopup),
+                    child: const SizedBox.shrink(),
                   ),
                 ),
-              ),
-            ],
+
+                // Live tracking pill (bottom-left) — shows connection status
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  child: TrackingPill(
+                    isConnected: _wsConnected,
+                    liveText: _wsConnected
+                        ? (lang == Lang.vi ? 'TRỰC TIẾP' : 'LIVE')
+                        : (lang == Lang.vi ? 'MẤT KẾT NỐI' : 'DISCONNECTED'),
+                  ),
+                ),
+
+                // Goong attribution (bottom-right)
+                Positioned(
+                  bottom: 4,
+                  right: 8,
+                  child: Text(
+                    '© Goong',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 8,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

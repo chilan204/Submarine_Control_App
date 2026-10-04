@@ -13,13 +13,14 @@ import '../../../../models/voice_command_response.dart';
 import '../../../../providers/app_provider.dart';
 import '../../../../services/telemetry_service.dart';
 import '../../../../services/voice_command_service.dart';
-import '../../../../theme.dart';
 import '../../../../utils/audio_file.dart';
 import '../../../../utils/recording_lifecycle.dart';
+import '../../../../utils/stop_recording.dart';
 import 'widgets/status_bar.dart';
 import '../metrics_panel.dart';
 import 'widgets/command_log.dart';
 import 'widgets/input_area.dart';
+import 'widgets/telemetry_waiting_panel.dart';
 
 class VoiceControlScreen extends StatefulWidget {
   const VoiceControlScreen({super.key});
@@ -160,7 +161,7 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
   }
 
   Future<void> _startListening(AppProvider provider) async {
-    if (_isSending || !mounted || !_recording.beginStart()) return;
+    if (_isSending || !mounted || !_hasData || !_recording.beginStart()) return;
     final lang = provider.lang;
     final token = provider.authToken;
     _recordPath = null;
@@ -200,6 +201,9 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
           if (!mounted) return;
           if (provider.authToken != token) throw StateError('Session changed');
         }
+        if (!_hasData) {
+          throw StateError('Telemetry disconnected during recording start');
+        }
         _recording.started();
         setState(() {
           _isListening = true;
@@ -211,8 +215,8 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
       if (mounted) {
         try {
           await _recording.track(() async {
-            await _speech.stop();
-            await _audioRecorder.stop();
+            await stopRecording(
+                stopSpeech: _speech.stop, stopRecorder: _audioRecorder.stop);
             final path = _recordPath;
             _recordPath = null;
             if (path != null) await deleteAudioFile(path);
@@ -228,7 +232,8 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     }
   }
 
-  Future<void> _stopListening(AppProvider provider) async {
+  Future<void> _stopListening(AppProvider provider,
+      {bool discard = false}) async {
     if (!_isListening || _isSending || !_recording.beginStop()) return;
     final token = provider.authToken;
     final language = provider.lang == Lang.vi ? 'vi' : 'en';
@@ -247,14 +252,16 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
 
     try {
       path = await _recording.track(() async {
-            await _speech.stop();
-            return await _audioRecorder.stop();
+            return await stopRecording(
+                stopSpeech: _speech.stop, stopRecorder: _audioRecorder.stop);
           }) ??
           path;
-      if (!mounted || provider.authToken != token) return;
+      if (!mounted || provider.authToken != token || discard || !_hasData) {
+        return;
+      }
       if (path != null && token != null) {
         final bytes = await readAudioBytes(path);
-        if (!mounted || provider.authToken != token) return;
+        if (!mounted || provider.authToken != token || !_hasData) return;
         if (bytes.isNotEmpty) {
           setState(() => _status = provider.t.processingCmd);
           final result = await _voiceCommandService.sendVoiceCommand(
@@ -388,35 +395,12 @@ class _VoiceControlScreenState extends State<VoiceControlScreen> {
     }
 
     if (!_hasData) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const CircularProgressIndicator(color: AppColors.accent),
-            const SizedBox(height: 16),
-            Text(
-              lang == Lang.vi
-                  ? 'Đang chờ dữ liệu tàu ngầm...'
-                  : 'Waiting for submarine data...',
-              style: const TextStyle(color: AppColors.muted, fontSize: 14),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _wsConnected
-                  ? (lang == Lang.vi
-                      ? 'Trạng thái: Đã kết nối máy chủ'
-                      : 'Status: Connected to server')
-                  : (lang == Lang.vi
-                      ? 'Trạng thái: Đang kết nối...'
-                      : 'Status: Connecting...'),
-              style: TextStyle(
-                color: _wsConnected ? AppColors.accent : AppColors.amber,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
+      return TelemetryWaitingPanel(
+        isVietnamese: lang == Lang.vi,
+        connected: _wsConnected,
+        recording: _isListening,
+        busy: _isSending || _recording.isStarting,
+        onStop: () => _stopListening(provider, discard: true),
       );
     }
 

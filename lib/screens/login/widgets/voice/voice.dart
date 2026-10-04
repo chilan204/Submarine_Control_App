@@ -12,6 +12,7 @@ import 'package:submarine_flutter/utils/audio_file.dart';
 import '../../../../l10n/translations.dart';
 import '../../../../providers/app_provider.dart';
 import '../../../../utils/recording_lifecycle.dart';
+import '../../../../utils/stop_recording.dart';
 
 class Voice extends StatefulWidget {
   const Voice({super.key, required this.onBack});
@@ -149,8 +150,8 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
       if (mounted) {
         try {
           await _recording.track(() async {
-            await _speech.stop();
-            await _audioRecorder.stop();
+            await stopRecording(
+                stopSpeech: _speech.stop, stopRecorder: _audioRecorder.stop);
             final path = _recordPath;
             _recordPath = null;
             if (path != null) await deleteAudioFile(path);
@@ -181,8 +182,8 @@ class _VoiceState extends State<Voice> with TickerProviderStateMixin {
     _recordPath = null;
     try {
       path = await _recording.track(() async {
-            await _speech.stop();
-            return await _audioRecorder.stop();
+            return await stopRecording(
+                stopSpeech: _speech.stop, stopRecorder: _audioRecorder.stop);
           }) ??
           path;
       if (!mounted) return;
